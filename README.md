@@ -1,4 +1,4 @@
-Stereoscopik
+Stroboscopik
 ============
 
 To pull, do `git pull https://github.com/desktop/Stroboscopik`
