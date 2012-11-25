@@ -1,4 +1,4 @@
-package com.cs434.stroboscopik.util;
+package com.cpsc434.stroboscopik.util;
 
 import android.app.Activity;
 import android.view.View;
