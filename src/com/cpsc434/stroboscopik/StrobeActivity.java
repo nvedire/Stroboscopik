@@ -1,14 +1,16 @@
-package com.cs434.stroboscopik;
-
-import com.cs434.stroboscopik.util.SystemUiHider;
+package com.cpsc434.stroboscopik;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+
+import com.cpsc434.stroboscopik.util.SystemUiHider;
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -16,7 +18,7 @@ import android.view.View;
  * 
  * @see SystemUiHider
  */
-public class StartActivity extends Activity {
+public class StrobeActivity extends Activity {
 	/**
 	 * Whether or not the system UI should be auto-hidden after
 	 * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
@@ -43,17 +45,21 @@ public class StartActivity extends Activity {
 	/**
 	 * The instance of the {@link SystemUiHider} for this activity.
 	 */
+	
 	private SystemUiHider mSystemUiHider;
+    private Handler mHandler = new Handler(); //for dummy flashing
+    public long flashTimeStamp = 0;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
-		setContentView(R.layout.activity_start);
+		setContentView(R.layout.activity_strobe);
 
 		final View controlsView = findViewById(R.id.fullscreen_content_controls);
 		final View contentView = findViewById(R.id.fullscreen_content);
 
+		startFlashing();
 		// Set up an instance of SystemUiHider to control the system UI for
 		// this activity.
 		mSystemUiHider = SystemUiHider.getInstance(this, contentView,
@@ -117,6 +123,36 @@ public class StartActivity extends Activity {
 		findViewById(R.id.dummy_button).setOnTouchListener(
 				mDelayHideTouchListener);
 	}
+	
+	private void startFlashing() {
+        mHandler.postDelayed(mFlashTask, 1000);
+	}
+	
+	private Runnable mFlashTask = new Runnable() {
+        public void run() {
+        	final View contentView = findViewById(R.id.fullscreen_content);
+        	contentView.setBackgroundColor(Color.argb(255, 255, 255, 255));
+        	flashTimeStamp = System.currentTimeMillis();
+        
+        	mHandler.postDelayed(mFadeTask, 10); //ideally these are constants defined elsewhere
+            mHandler.postDelayed(this, 500);
+        }
+    };
+    
+    private Runnable mFadeTask = new Runnable() {
+        public void run() {
+        	final View contentView = findViewById(R.id.fullscreen_content);
+			long elapsed = System.currentTimeMillis() - flashTimeStamp;
+			int c = 255 - (int) ((double) elapsed/200.0 * 255);
+			c = c < 0 ? 0 : c; //normalize c
+        	contentView.setBackgroundColor(Color.argb(255, c, c, c));
+        	
+        	if (c < 255) {
+	            mHandler.postDelayed(this, 5);
+        	}
+            
+        }
+    };
 
 	@Override
 	protected void onPostCreate(Bundle savedInstanceState) {

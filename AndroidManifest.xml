@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.cs434.stroboscopik"
+    package="com.cpsc434.stroboscopik"
     android:versionCode="1"
     android:versionName="1.0" >
 
     <uses-sdk
-        android:minSdkVersion="8"
-        android:targetSdkVersion="17" />
+        android:minSdkVersion="10"
+        android:targetSdkVersion="16" />
 
     <!-- Declaration of custom GCM Message permission -->
     <permission android:name="com.cs434.stroboscopik.permission.C2D_MESSAGE"
@@ -25,7 +25,7 @@
         android:label="@string/app_name"
         android:theme="@style/AppTheme" >
         <activity
-            android:name="com.cs434.stroboscopik.StartActivity"
+            android:name="com.cpsc434.stroboscopik.StrobeActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:label="@string/app_name"
             android:theme="@style/FullscreenTheme" >
@@ -45,5 +45,7 @@
             </intent-filter>
         </receiver>
     </application>
+    
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
 </manifest>
