@@ -63,7 +63,7 @@ public class StrobeActivity extends Activity {
 		GCMRegistrar.checkManifest(this);
 		String regId = GCMRegistrar.getRegistrationId(this);
 		if (regId == "") {
-			GCMRegistrar.register(this, Constants.SENDER_ID);
+			GCMRegistrar.register(this, Constants.APP_SENDER_ID);
 		} else {
 			Log.v(TAG, "Already Registered with ID: "+regId);
 		}
