@@ -14,8 +14,8 @@ public class Constants {
 	static final String APP_REG_ID = 		"reg_id";
 	static final String APP_CLUSTER_ID = 	"cluster_id";
 	
-	//SharedPreferences to determine registered or unregistered
-	static final String APP_GCM_SETTINGS =  	"com.cpsc434.stroboscopik.gcm";
+	//SharedPreferences that store the App's settings
+	static final String APP_SETTINGS =  		"com.cpsc434.stroboscopik.settings";
 	static final String APP_GCM_REGID_KEY = 	"GCM_REGID";
 	static final String APP_GCM_CLUSTER_KEY = 	"GCM_CLUSTER";
 

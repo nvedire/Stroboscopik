@@ -34,7 +34,7 @@ public class GCMIntentService extends GCMBaseIntentService {
 	}
 	
 	protected void onRegistered(Context context, String registrationId) {
-		SharedPreferences settings = getSharedPreferences(Constants.APP_GCM_SETTINGS, MODE_PRIVATE);
+		SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
 		String regId = GCMRegistrar.getRegistrationId(getApplicationContext());
 		String oldId = settings.getString(Constants.APP_GCM_REGID_KEY, regId);
 		String cluster = settings.getString(Constants.APP_GCM_CLUSTER_KEY, Constants.APP_NO_CLUSTER);
@@ -73,7 +73,7 @@ public class GCMIntentService extends GCMBaseIntentService {
 	}
 	
 	protected void onUnregistered(Context context, String errorId) {
-		SharedPreferences settings = getSharedPreferences(Constants.APP_GCM_SETTINGS, MODE_PRIVATE);
+		SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
 		String oldId = settings.getString(Constants.APP_GCM_REGID_KEY, "");
 
 		//Notify the server and dissociate from the cluster
