@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
@@ -52,6 +53,9 @@ public class GCMIntentService extends GCMBaseIntentService {
 			
 			//Execute the request
 			HttpResponse response = httpclient.execute(httppost);
+			if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
+				throw new IOException(response.getStatusLine().getReasonPhrase());
+			}
 		} catch (ClientProtocolException e) {
 			Log.e(TAG, e.getMessage());
 		} catch (IOException e) {
@@ -72,7 +76,26 @@ public class GCMIntentService extends GCMBaseIntentService {
 		SharedPreferences settings = getSharedPreferences(Constants.APP_GCM_SETTINGS, MODE_PRIVATE);
 		String oldId = settings.getString(Constants.APP_GCM_REGID_KEY, "");
 
-		//TODO: Notify the server and dissociate from the cluster
+		//Notify the server and dissociate from the cluster
+		HttpClient httpclient = new DefaultHttpClient();
+		HttpPost httppost = new HttpPost(Constants.APP_UNREG_URL);
+		
+		try {
+			//Add Data to the Request object
+			List<NameValuePair> data = new ArrayList<NameValuePair>();
+			data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, oldId));
+			httppost.setEntity(new UrlEncodedFormEntity(data));
+			
+			//Execute the request
+			HttpResponse response = httpclient.execute(httppost);
+			if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
+				throw new IOException(response.getStatusLine().getReasonPhrase());
+			}
+		} catch (ClientProtocolException e) {
+			Log.e(TAG, e.getMessage());
+		} catch (IOException e) {
+			Log.e(TAG, e.getMessage());
+		}
 		
 		SharedPreferences.Editor ed = settings.edit();
 		ed.putString(Constants.APP_GCM_REGID_KEY, "");
