@@ -29,4 +29,5 @@ public class Constants {
 	static final String APP_NO_CLUSTER =  "NONE";	//Node is not associated to any other cluster
 	static final String APP_NEW_CLUSTER = "NEW";	//Node has decided to become a supernode
 	static final int    APP_DEFAULT_FREQ = 10;		//Arbitrary new frequency of 10 Hz
+	static final int 	APP_DEFAULT_FADE = 100;     //Fade time, in milliseconds
 }

@@ -1,7 +1,23 @@
 package com.cpsc434.stroboscopik;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -49,8 +65,8 @@ public class StrobeActivity extends Activity {
 	/**
 	 * The instance of the {@link SystemUiHider} for this activity.
 	 */
-    private static double flashPeriod = 200.0; //the period of time when the screen is "white" or in strobing state
-    private static int restPeriod = 500; //the period of time when the screen is "black" or in resting state
+    private static double flashPeriod = 150.0; //the period of time when the screen is "white" or in strobing state
+    private static int restPeriod = 300; //the period of time when the screen is "black" or in resting state
    
     //define resting color
     private static int restR = 0;
@@ -65,6 +81,7 @@ public class StrobeActivity extends Activity {
 	private SystemUiHider mSystemUiHider;
     private Handler mHandler = new Handler(); //for dummy flashing
     public long flashTimeStamp = 0;
+	private	SharedPreferences settings;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -73,6 +90,7 @@ public class StrobeActivity extends Activity {
 		// Check for GCM Registration. Register if not registered
 		GCMRegistrar.checkDevice(this);
 		GCMRegistrar.checkManifest(this);
+		settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
 		String regId = GCMRegistrar.getRegistrationId(this);
 		if (regId == "") {
 			GCMRegistrar.register(this, Constants.APP_SENDER_ID);
@@ -157,6 +175,9 @@ public class StrobeActivity extends Activity {
 	
 	private Runnable mFlashTask = new Runnable() {
         public void run() {
+        	
+        	updatePeriods();
+        	
         	final View contentView = findViewById(R.id.fullscreen_content);
         	contentView.setBackgroundColor(Color.argb(255, flashR, flashG, flashB));
         	flashTimeStamp = System.currentTimeMillis();
@@ -166,17 +187,92 @@ public class StrobeActivity extends Activity {
         }
     };
     
+    private void updatePeriods() {
+		int freq = settings.getInt(Constants.APP_GCM_FREQUENCY_KEY, Constants.APP_DEFAULT_FREQ);
+		restPeriod = 1000/freq;
+		
+		if ( flashPeriod < restPeriod ) {
+			flashPeriod = restPeriod;
+		} else {
+			flashPeriod = Constants.APP_DEFAULT_FADE;
+		}
+    }
+    
+    private void initializeSuperNode() {
+		String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then BAD
+		if (regId == "") {
+			Log.e("initializeSuperNode", "regId null");
+			return;
+		}
+		
+		//Perform Registration and Unregistration
+		HttpClient httpclient = new DefaultHttpClient();
+		HttpPost httppost = new HttpPost(Constants.APP_SUPER_URL);
+		
+		try {
+			//Add Data to the Request object
+			List<NameValuePair> data = new ArrayList<NameValuePair>();
+			data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
+			httppost.setEntity(new UrlEncodedFormEntity(data));
+			
+			//Execute the request
+			HttpResponse response = httpclient.execute(httppost);
+			if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
+				throw new IOException(response.getStatusLine().getReasonPhrase());
+			}
+		} catch (ClientProtocolException e) {
+			Log.e(TAG, e.getMessage());
+		} catch (IOException e) {
+			Log.e(TAG, e.getMessage());
+		}
+    	
+    }
+    
+    private void onAcquiredSuperNode() {
+		String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
+		if (regId == "") {
+			Log.e("onAcquiredSuperNode", "regId null");
+			return;
+		}
+		
+		String cluster = settings.getString(Constants.APP_CLUSTER_KEY, Constants.APP_NO_CLUSTER);
+		
+		//Perform Registration and Unregistration
+		HttpClient httpclient = new DefaultHttpClient();
+		HttpPost httppost = new HttpPost(Constants.APP_REG_URL);
+		
+		try {
+			//Add Data to the Request object
+			List<NameValuePair> data = new ArrayList<NameValuePair>();
+			data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
+			data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
+			data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, cluster));
+			httppost.setEntity(new UrlEncodedFormEntity(data));
+			
+			//Execute the request
+			HttpResponse response = httpclient.execute(httppost);
+			if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
+				throw new IOException(response.getStatusLine().getReasonPhrase());
+			}
+		} catch (ClientProtocolException e) {
+			Log.e(TAG, e.getMessage());
+		} catch (IOException e) {
+			Log.e(TAG, e.getMessage());
+		}
+    }
+    
     private Runnable mFadeTask = new Runnable() {
         public void run() {
         	final View contentView = findViewById(R.id.fullscreen_content);
 			long elapsed = System.currentTimeMillis() - flashTimeStamp;
 			
 			//interpolate
-			int r = (int) ((1 - (double) elapsed/flashPeriod) * flashR) + (int) ((double) elapsed/flashPeriod * restR);
-			int g = (int) ((1 - (double) elapsed/flashPeriod) * flashG) + (int) ((double) elapsed/flashPeriod * restG);
-			int b = (int) ((1 - (double) elapsed/flashPeriod) * flashB) + (int) ((double) elapsed/flashPeriod * restB);
+			double frac = (double) elapsed/flashPeriod;
+			int r = (int) ((1 - frac) * flashR) + (int) (frac * restR);
+			int g = (int) ((1 - frac) * flashG) + (int) (frac * restG);
+			int b = (int) ((1 - frac) * flashB) + (int) (frac * restB);
 			
-			System.out.println(r + ", " + g + ", " + b);
+			//System.out.println(r + ", " + g + ", " + b);
 		
 			//normalize
 			r = r < 0 ? 0 : r;
@@ -191,6 +287,13 @@ public class StrobeActivity extends Activity {
             
         }
     };
+    
+    private void waitForSuperNode() {
+    	Random r = new Random(123948); //sloppy testing
+    	int wait = (int) (r.nextDouble() * 30000);
+    	
+    	
+    }
 
 	@Override
 	protected void onPostCreate(Bundle savedInstanceState) {
