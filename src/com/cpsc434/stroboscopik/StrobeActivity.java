@@ -49,7 +49,19 @@ public class StrobeActivity extends Activity {
 	/**
 	 * The instance of the {@link SystemUiHider} for this activity.
 	 */
-	
+    private static double flashPeriod = 200.0; //the period of time when the screen is "white" or in strobing state
+    private static int restPeriod = 500; //the period of time when the screen	s "black" or in resting state
+   
+    //define resting color
+    private static int restR = 0;
+    private static int restG = 0;
+    private static int restB = 0;
+    
+    //define flashing color
+    private static int flashR = 255;
+    private static int flashG = 255;
+    private static int flashB = 255;
+    
 	private SystemUiHider mSystemUiHider;
     private Handler mHandler = new Handler(); //for dummy flashing
     public long flashTimeStamp = 0;
@@ -146,11 +158,11 @@ public class StrobeActivity extends Activity {
 	private Runnable mFlashTask = new Runnable() {
         public void run() {
         	final View contentView = findViewById(R.id.fullscreen_content);
-        	contentView.setBackgroundColor(Color.argb(255, 255, 255, 255));
+        	contentView.setBackgroundColor(Color.argb(255, flashR, flashG, flashB));
         	flashTimeStamp = System.currentTimeMillis();
         
         	mHandler.postDelayed(mFadeTask, 10); //ideally these are constants defined elsewhere
-            mHandler.postDelayed(this, 500);
+            mHandler.postDelayed(this, restPeriod);
         }
     };
     
@@ -158,11 +170,20 @@ public class StrobeActivity extends Activity {
         public void run() {
         	final View contentView = findViewById(R.id.fullscreen_content);
 			long elapsed = System.currentTimeMillis() - flashTimeStamp;
-			int c = 255 - (int) ((double) elapsed/200.0 * 255);
-			c = c < 0 ? 0 : c; //normalize c
-        	contentView.setBackgroundColor(Color.argb(255, c, c, c));
+			
+			//interpolate
+			int r = flashR - (int) ((double) elapsed/flashPeriod * restR);
+			int g = flashG - (int) ((double) elapsed/flashPeriod * restG);
+			int b = flashB - (int) ((double) elapsed/flashPeriod * restB);
+		
+			//normalize
+			r = r < 0 ? 0 : r;
+			g = g < 0 ? 0 : g;
+			b = b < 0 ? 0 : b;
+			
+        	contentView.setBackgroundColor(Color.argb(255, r, g, b));
         	
-        	if (c < 255) {
+        	if (r != restR || g != restG || b != restB ) {
 	            mHandler.postDelayed(this, 5);
         	}
             
