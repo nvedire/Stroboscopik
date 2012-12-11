@@ -1,6 +1,7 @@
 package com.cpsc434.stroboscopik;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -23,6 +24,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
@@ -328,11 +330,22 @@ public class StrobeActivity extends Activity {
     };
     
     private void waitForSuperNode() {
-    	Random r = new Random(123948); //sloppy testing
-    	int wait = (int) (r.nextDouble() * 30000);
-    	Log.d("waitForSuperNode", "waiting " + Integer.toString(wait) + " milliseconds.");
+    	String uid = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+    	long seed = new BigInteger(uid, 16).longValue();
+    	Random r = new Random(seed);
     	
-		mHideHandler.postDelayed(mBecomeSuperNode, wait);
+    	double flip = r.nextDouble();
+    	int wait = 0;
+    	
+    	if (flip < 0.7) {
+    		wait = (int) (r.nextDouble() * Constants.APP_STARTUP_LONG_WAIT);
+	    	Log.d("waitForSuperNode", "waiting " + Integer.toString(wait) + " milliseconds.");
+			mHandler.postDelayed(mBecomeSuperNode, wait);
+    	} else {
+    		wait = (int) (r.nextDouble() * Constants.APP_STARTUP_SHORT_WAIT);
+    		Log.d("waitForSuperNode", "promoted; will become supernode soon.");
+    		mHandler.postDelayed(mBecomeSuperNode, wait);
+    	}
     }
     
     private Runnable mBecomeSuperNode = new Runnable() {
