@@ -3,6 +3,7 @@ package com.cpsc434.stroboscopik;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
@@ -78,9 +79,9 @@ public class StrobeActivity extends Activity {
   private static int restB = 0;
 
   //define flashing color
-  private static int flashR = 255;
-  private static int flashG = 0;
-  private static int flashB = 146;
+  private static int flashR = 186;
+  private static int flashG = 1;
+  private static int flashB = 255;
 
   private SystemUiHider mSystemUiHider;
   private Handler mHandler = new Handler(); //for dummy flashing
@@ -177,7 +178,8 @@ public class StrobeActivity extends Activity {
     findViewById(R.id.dummy_button).setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View v) {
-        waitForSuperNode();
+        waitForSupernode();
+        //onBecomeSubnode();
       }
     });
   }
@@ -209,6 +211,7 @@ public class StrobeActivity extends Activity {
     } else {
       flashPeriod = Constants.APP_DEFAULT_FADE;
     }
+    //Log.d("UpdatePeriods", "new frequency: " + freq);
   }
 
   private void evolveIntoSupernode() {
@@ -235,7 +238,7 @@ public class StrobeActivity extends Activity {
     p.execute(params);
   }
 
-  private void onEnslavedBySupernode() {
+  private void onBecomeSubnode() {
     String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
     if (regId == "") {
       Log.e("onAcquiredSuperNode", "regId null");
@@ -248,10 +251,10 @@ public class StrobeActivity extends Activity {
     List<NameValuePair> data = new ArrayList<NameValuePair>();
     data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
     data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
-    data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, cluster));
+    data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, "0"));
 
     HTTPRequestParams[] params = new HTTPRequestParams[1];
-    params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
+    params[0] = new HTTPRequestParams(Constants.APP_REG_URL, data,
         "Success! You are now connected to a cluster.",
         "Failure: cannot contact servers");
 
@@ -272,21 +275,35 @@ public class StrobeActivity extends Activity {
 
       String url = p.url;
       List<NameValuePair> data = p.data;
+      
 
       String success = p.success;
       String failure = p.failure;
 
+      Log.d("PostHTTPTask", "Gathering HTTP POST message");
+      
+      //debug
+      Log.d("PostHTTPTaskData", "what I'm sending follows:");
+      Iterator<NameValuePair> i = data.iterator();
+      while (i.hasNext()) {
+        NameValuePair pair = i.next();
+        Log.d("PostHTTPTaskData", pair.getName().toString() + ":" + pair.getValue());
+      }
+      Log.d("PostHTTPTaskData", "end POST data");
+      
       HttpClient httpclient = new DefaultHttpClient();
       HttpPost httppost = new HttpPost(url);
 
       try {
+        Log.d("PostHTTPTask", "posting to " + url + " ...");
+        
         httppost.setEntity(new UrlEncodedFormEntity(data));
 
         //Execute the request
         HttpResponse response = httpclient.execute(httppost);
 
         if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
-          Log.e("postHTTPRequest", "HTTP Response NOT OK");
+          Log.e("postHTTPRequest", "HTTP Response NOT OK " + Integer.toString(response.getStatusLine().getStatusCode()) +": " + response.getStatusLine().getReasonPhrase());
           return failure;
         }
 
@@ -330,7 +347,8 @@ public class StrobeActivity extends Activity {
     }
   };
 
-  private void waitForSuperNode() {
+  private void waitForSupernode() {
+    //for real deployment
     String uid = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
     long seed = new BigInteger(uid, 16).longValue();
     Random r = new Random(seed);
@@ -340,11 +358,11 @@ public class StrobeActivity extends Activity {
 
     if (flip < 0.7) {
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_LONG_WAIT);
-      Log.d("waitForSuperNode", "waiting " + Integer.toString(wait) + " milliseconds.");
+      Log.d("waitForSupernode", "waiting " + Integer.toString(wait) + " milliseconds.");
       mHandler.postDelayed(mBecomeSuperNode, wait);
     } else {
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_SHORT_WAIT);
-      Log.d("waitForSuperNode", "promoted; will become supernode soon.");
+      Log.d("waitForSupernode", "promoted; will become supernode soon.");
       mHandler.postDelayed(mBecomeSuperNode, wait);
     }
   }
@@ -354,7 +372,6 @@ public class StrobeActivity extends Activity {
       if (isSuperNode) {
         return;
       }
-
       evolveIntoSupernode();
     }
   };
