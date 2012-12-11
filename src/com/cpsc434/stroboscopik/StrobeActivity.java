@@ -19,12 +19,14 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Toast;
 
 import com.cpsc434.stroboscopik.util.SystemUiHider;
 import com.google.android.gcm.GCMRegistrar;
@@ -82,6 +84,8 @@ public class StrobeActivity extends Activity {
     private Handler mHandler = new Handler(); //for dummy flashing
     public long flashTimeStamp = 0;
 	private	SharedPreferences settings;
+	private boolean isSuperNode = false;
+	private boolean searchingForSupernode = false; //make this a state
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -167,6 +171,13 @@ public class StrobeActivity extends Activity {
 		// while interacting with the UI.
 		findViewById(R.id.dummy_button).setOnTouchListener(
 				mDelayHideTouchListener);
+		
+		findViewById(R.id.dummy_button).setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				waitForSuperNode();
+			}
+		});
 	}
 	
 	private void startFlashing() {
@@ -198,37 +209,30 @@ public class StrobeActivity extends Activity {
 		}
     }
     
-    private void initializeSuperNode() {
+    private void evolveIntoSupernode() {
+    	if (searchingForSupernode) return; //TODO: should be a robust mechanism for ensuring this doesn't get called multiple times, maybe states?
+    	
+    	searchingForSupernode = true;
+    	
 		String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then BAD
 		if (regId == "") {
 			Log.e("initializeSuperNode", "regId null");
 			return;
 		}
 		
-		//Perform Registration and Unregistration
-		HttpClient httpclient = new DefaultHttpClient();
-		HttpPost httppost = new HttpPost(Constants.APP_SUPER_URL);
+		List<NameValuePair> data = new ArrayList<NameValuePair>();
+		data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
 		
-		try {
-			//Add Data to the Request object
-			List<NameValuePair> data = new ArrayList<NameValuePair>();
-			data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
-			httppost.setEntity(new UrlEncodedFormEntity(data));
-			
-			//Execute the request
-			HttpResponse response = httpclient.execute(httppost);
-			if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
-				throw new IOException(response.getStatusLine().getReasonPhrase());
-			}
-		} catch (ClientProtocolException e) {
-			Log.e(TAG, e.getMessage());
-		} catch (IOException e) {
-			Log.e(TAG, e.getMessage());
-		}
-    	
+		HTTPRequestParams[] params = new HTTPRequestParams[1];
+		params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
+											"Success! You are now a supernode.",
+											"Failure: cannot contact servers");
+		
+		PostHTTPTask p = new PostHTTPTask();
+		p.execute(params);
     }
     
-    private void onAcquiredSuperNode() {
+    private void onEnslavedBySupernode() {
 		String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
 		if (regId == "") {
 			Log.e("onAcquiredSuperNode", "regId null");
@@ -238,28 +242,63 @@ public class StrobeActivity extends Activity {
 		String cluster = settings.getString(Constants.APP_CLUSTER_KEY, Constants.APP_NO_CLUSTER);
 		
 		//Perform Registration and Unregistration
-		HttpClient httpclient = new DefaultHttpClient();
-		HttpPost httppost = new HttpPost(Constants.APP_REG_URL);
+		List<NameValuePair> data = new ArrayList<NameValuePair>();
+		data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
+		data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
+		data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, cluster));
 		
-		try {
-			//Add Data to the Request object
-			List<NameValuePair> data = new ArrayList<NameValuePair>();
-			data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
-			data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
-			data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, cluster));
-			httppost.setEntity(new UrlEncodedFormEntity(data));
+		HTTPRequestParams[] params = new HTTPRequestParams[1];
+		params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
+											"Success! You are now connected to a cluster.",
+											"Failure: cannot contact servers");
+		
+		PostHTTPTask p = new PostHTTPTask();
+		p.execute(params);
+    }
+    
+    private class PostHTTPTask extends AsyncTask<HTTPRequestParams, Integer, String> {
+    	
+		protected void onPostExecute(String result) {
+			Toast message = Toast.makeText(getApplicationContext(), result, Toast.LENGTH_SHORT);
+			message.show();
+		} // end of onPostExecute
+
+		@Override
+		protected String doInBackground(HTTPRequestParams... params) {
+			HTTPRequestParams p = params[0];
 			
-			//Execute the request
-			HttpResponse response = httpclient.execute(httppost);
-			if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
-				throw new IOException(response.getStatusLine().getReasonPhrase());
+			String url = p.url;
+			List<NameValuePair> data = p.data;
+			
+			String success = p.success;
+			String failure = p.failure;
+			
+			HttpClient httpclient = new DefaultHttpClient();
+			HttpPost httppost = new HttpPost(url);
+			
+			try {
+				httppost.setEntity(new UrlEncodedFormEntity(data));
+				
+				//Execute the request
+				HttpResponse response = httpclient.execute(httppost);
+				
+				if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
+					Log.e("postHTTPRequest", "HTTP Response NOT OK");
+					return failure;
+				}
+			
+			} catch (ClientProtocolException e) {
+				Log.e(TAG, e.getMessage());
+				return failure;
+			} catch (IOException e) {
+				Log.e(TAG, e.getMessage());
+				return failure;
 			}
-		} catch (ClientProtocolException e) {
-			Log.e(TAG, e.getMessage());
-		} catch (IOException e) {
-			Log.e(TAG, e.getMessage());
+			
+			return success;
 		}
     }
+    
     
     private Runnable mFadeTask = new Runnable() {
         public void run() {
@@ -291,9 +330,20 @@ public class StrobeActivity extends Activity {
     private void waitForSuperNode() {
     	Random r = new Random(123948); //sloppy testing
     	int wait = (int) (r.nextDouble() * 30000);
+    	Log.d("waitForSuperNode", "waiting " + Integer.toString(wait) + " milliseconds.");
     	
-    	
+		mHideHandler.postDelayed(mBecomeSuperNode, wait);
     }
+    
+    private Runnable mBecomeSuperNode = new Runnable() {
+        public void run() {
+        	if (isSuperNode) {
+        		return;
+        	}
+        	
+        	evolveIntoSupernode();
+        }
+    };
 
 	@Override
 	protected void onPostCreate(Bundle savedInstanceState) {
