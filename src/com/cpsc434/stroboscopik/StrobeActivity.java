@@ -50,7 +50,7 @@ public class StrobeActivity extends Activity {
 	 * The instance of the {@link SystemUiHider} for this activity.
 	 */
     private static double flashPeriod = 200.0; //the period of time when the screen is "white" or in strobing state
-    private static int restPeriod = 500; //the period of time when the screen	s "black" or in resting state
+    private static int restPeriod = 500; //the period of time when the screen is "black" or in resting state
    
     //define resting color
     private static int restR = 0;
@@ -59,8 +59,8 @@ public class StrobeActivity extends Activity {
     
     //define flashing color
     private static int flashR = 255;
-    private static int flashG = 255;
-    private static int flashB = 255;
+    private static int flashG = 0;
+    private static int flashB = 146;
     
 	private SystemUiHider mSystemUiHider;
     private Handler mHandler = new Handler(); //for dummy flashing
@@ -172,9 +172,11 @@ public class StrobeActivity extends Activity {
 			long elapsed = System.currentTimeMillis() - flashTimeStamp;
 			
 			//interpolate
-			int r = flashR - (int) ((double) elapsed/flashPeriod * restR);
-			int g = flashG - (int) ((double) elapsed/flashPeriod * restG);
-			int b = flashB - (int) ((double) elapsed/flashPeriod * restB);
+			int r = (int) ((1 - (double) elapsed/flashPeriod) * flashR) + (int) ((double) elapsed/flashPeriod * restR);
+			int g = (int) ((1 - (double) elapsed/flashPeriod) * flashG) + (int) ((double) elapsed/flashPeriod * restG);
+			int b = (int) ((1 - (double) elapsed/flashPeriod) * flashB) + (int) ((double) elapsed/flashPeriod * restB);
+			
+			System.out.println(r + ", " + g + ", " + b);
 		
 			//normalize
 			r = r < 0 ? 0 : r;
@@ -193,10 +195,6 @@ public class StrobeActivity extends Activity {
 	@Override
 	protected void onPostCreate(Bundle savedInstanceState) {
 		super.onPostCreate(savedInstanceState);
-
-		// Trigger the initial hide() shortly after the activity has been
-		// created, to briefly hint to the user that UI controls
-		// are available.
 		delayedHide(100);
 	}
 
