@@ -107,11 +107,11 @@ public class GCMIntentService extends GCMBaseIntentService {
 	
 	@Override
 	protected void onMessage(Context context, Intent intent) {
-		SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
+		SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_MULTI_PROCESS);
 		SharedPreferences.Editor ed = settings.edit();
 		ed.putString(Constants.APP_CLUSTER_KEY, intent.getStringExtra(Constants.APP_GCM_CLUSTER_KEY));
 		ed.putInt(Constants.APP_FREQUENCY_KEY, Integer.parseInt(intent.getStringExtra(Constants.APP_GCM_FREQUENCY_KEY)));
-		Log.d("onMessage", "new frequency: " + intent.getStringExtra(Constants.APP_GCM_FREQUENCY_KEY));
+		//Log.d("onMessage", "new frequency: " + settings.getInt(Constants.APP_GCM_FREQUENCY_KEY, 10));
 		ed.commit();
 	}
 	

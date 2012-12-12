@@ -20,11 +20,13 @@ import org.apache.http.message.BasicNameValuePair;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.SharedPreferences;
+import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -91,9 +93,14 @@ public class StrobeActivity extends Activity {
     IN_TRANSITION
   };
   
+  //transition states
   private static enum Transition {
-    TO_SUPERNODE,
-    TO_SUBNODE,
+    SUPERNODE_PENDING_SERVER_VALIDATION, //in case server can't be contacted
+    SUBNODE_PENDING_SERVER_VALIDATION,
+    SUPERNODE_PENDING_GCM,  //last step to becoming supernode
+    SUBNODE_PENDING_GCM,
+    FAILED_SUBNODE,
+    FAILED_SUPERNODE,
     SEARCHING_FOR_SUPERNODE,
     NONE
   };
@@ -103,7 +110,6 @@ public class StrobeActivity extends Activity {
 
   private SystemUiHider mSystemUiHider;
   private Handler mHandler = new Handler(); //for dummy flashing
-  private SharedPreferences settings;
 
   public long flashTimeStamp = 0;
   
@@ -114,7 +120,6 @@ public class StrobeActivity extends Activity {
     // Check for GCM Registration. Register if not registered
     GCMRegistrar.checkDevice(this);
     GCMRegistrar.checkManifest(this);
-    settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
     String regId = GCMRegistrar.getRegistrationId(this);
     if (regId == "") {
       GCMRegistrar.register(this, Constants.APP_SENDER_ID);
@@ -124,33 +129,28 @@ public class StrobeActivity extends Activity {
     // End GCM Registration
 
     setContentView(R.layout.activity_strobe);
-
+    
     final View controlsView = findViewById(R.id.fullscreen_content_controls);
     final View contentView = findViewById(R.id.fullscreen_content);
 
-    startFlashing();
     mSystemUiHider = SystemUiHider.getInstance(this, contentView,
         HIDER_FLAGS);
     mSystemUiHider.setup();
     mSystemUiHider
     .setOnVisibilityChangeListener(new SystemUiHider.OnVisibilityChangeListener() {
-      int mControlsHeight;
       int mShortAnimTime;
 
       @Override
       @TargetApi(Build.VERSION_CODES.HONEYCOMB_MR2)
       public void onVisibilityChange(boolean visible) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR2) {
-          if (mControlsHeight == 0) {
-            mControlsHeight = controlsView.getHeight();
-          }
           if (mShortAnimTime == 0) {
             mShortAnimTime = getResources().getInteger(
                 android.R.integer.config_shortAnimTime);
           }
           controlsView
           .animate()
-          .translationY(visible ? 0 : mControlsHeight)
+          .alpha(visible ? 1.f : 0.f)
           .setDuration(mShortAnimTime);
         } else {
           controlsView.setVisibility(visible ? View.VISIBLE
@@ -185,6 +185,29 @@ public class StrobeActivity extends Activity {
     });
   }
   
+  View.OnTouchListener mDelayHideTouchListener = new View.OnTouchListener() {
+    @Override
+    public boolean onTouch(View view, MotionEvent motionEvent) {
+      if (AUTO_HIDE) {
+        delayedHide(AUTO_HIDE_DELAY_MILLIS);
+      }
+      return false;
+    }
+  };
+
+  Handler mHideHandler = new Handler();
+  Runnable mHideRunnable = new Runnable() {
+    @Override
+    public void run() {
+      mSystemUiHider.hide();
+    }
+  };
+
+  private void delayedHide(int delayMillis) {
+    mHideHandler.removeCallbacks(mHideRunnable);
+    mHideHandler.postDelayed(mHideRunnable, delayMillis);
+  }
+  
   private void searchForSupernode() {
     String uid = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
     long seed = new BigInteger(uid, 16).longValue() + System.currentTimeMillis();
@@ -198,11 +221,11 @@ public class StrobeActivity extends Activity {
 
     if (flip < 0.7) {
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_LONG_WAIT);
-      Log.d("waitForSupernode", "waiting " + Integer.toString(wait) + " milliseconds.");
+      Log.d(TAG, "waiting " + Integer.toString(wait) + " milliseconds for a supernode.");
       mHandler.postDelayed(evolveIntoSupernode, wait);
     } else {
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_SHORT_WAIT);
-      Log.d("waitForSupernode", "promoted; will become supernode soon.");
+      Log.d(TAG, "promoted; will become supernode soon.");
       mHandler.postDelayed(evolveIntoSupernode, wait);
     }
   }
@@ -210,10 +233,10 @@ public class StrobeActivity extends Activity {
   private Runnable evolveIntoSupernode = new Runnable() {
     public void run() {
       if (!(state == State.IN_TRANSITION && trans == Transition.SEARCHING_FOR_SUPERNODE) ) return;
-  
+      SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_MULTI_PROCESS);
       String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then BAD
       if (regId == "") {
-        Log.e("evolveIntoSupernode", "regId null");
+        Log.e(TAG, "evolveIntoSupernode: regId null");
         return;
       }
   
@@ -224,10 +247,8 @@ public class StrobeActivity extends Activity {
       params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
           "Success! You are now a supernode.",
           "Failure: cannot contact servers");
-  
       PostHTTPTask p = new PostHTTPTask();
-      
-      trans = Transition.TO_SUPERNODE;
+      trans = Transition.SUPERNODE_PENDING_SERVER_VALIDATION;
       
       p.execute(params);
     }
@@ -251,40 +272,49 @@ public class StrobeActivity extends Activity {
   };
 
   private void updatePeriods() {
+    SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_MULTI_PROCESS);
     int freq = settings.getInt(Constants.APP_GCM_FREQUENCY_KEY, Constants.APP_DEFAULT_FREQ);
     restPeriod = 1000/freq;
 
-    if ( flashPeriod < restPeriod ) {
-      flashPeriod = restPeriod;
+    if ( flashPeriod > restPeriod ) {
+      flashPeriod = restPeriod - 100;
     } else {
       flashPeriod = Constants.APP_DEFAULT_FADE;
     }
     //Log.d("UpdatePeriods", "new frequency: " + freq);
   }
-
-
-  private void onBecomeSubnode() {
-    String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
-    if (regId == "") {
-      Log.e("onBecomeSubnode", "regId null");
-      return;
+  
+  private Runnable morphIntoSubnode = new Runnable() {
+    public void run() {
+      SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_MULTI_PROCESS);
+      String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
+      if (regId == "") {
+        Log.e(TAG, "regId null");
+        return;
+      }
+  
+      String cluster = settings.getString(Constants.APP_CLUSTER_KEY, Constants.APP_NO_CLUSTER);
+  
+      //Perform Registration and Unregistration
+      List<NameValuePair> data = new ArrayList<NameValuePair>();
+      data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
+      data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
+      data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, "0"));
+  
+      HTTPRequestParams[] params = new HTTPRequestParams[1];
+      params[0] = new HTTPRequestParams(Constants.APP_REG_URL, data,
+          "Success! You are now connected to a cluster.",
+          "Failure: cannot contact servers");
+  
+      PostHTTPTask p = new PostHTTPTask();
+      p.execute(params);
     }
+  };
 
-    String cluster = settings.getString(Constants.APP_CLUSTER_KEY, Constants.APP_NO_CLUSTER);
-
-    //Perform Registration and Unregistration
-    List<NameValuePair> data = new ArrayList<NameValuePair>();
-    data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
-    data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
-    data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, "0"));
-
-    HTTPRequestParams[] params = new HTTPRequestParams[1];
-    params[0] = new HTTPRequestParams(Constants.APP_REG_URL, data,
-        "Success! You are now connected to a cluster.",
-        "Failure: cannot contact servers");
-
-    PostHTTPTask p = new PostHTTPTask();
-    p.execute(params);
+  private void onFoundSubnode() {
+    state = State.IN_TRANSITION;
+    trans = Transition.SEARCHING_FOR_SUPERNODE;
+    mHandler.post(morphIntoSubnode);
   }
  
   //do any post results cleanup if necessary; also retry if necessary
@@ -295,24 +325,37 @@ public class StrobeActivity extends Activity {
       break;
     case SEARCHING_FOR_SUPERNODE:
       break;
-    case TO_SUBNODE:
+    case SUBNODE_PENDING_SERVER_VALIDATION:
       state = State.SUBNODE;
       trans = Transition.NONE;
+      startFlashing();
       break;
-    case TO_SUPERNODE:
+    case SUPERNODE_PENDING_SERVER_VALIDATION:
       state = State.SUPERNODE;
       trans = Transition.NONE;
+      startFlashing();
       break;
+    case FAILED_SUBNODE:
+      state = State.IN_TRANSITION;
+      trans = Transition.SEARCHING_FOR_SUPERNODE;
+      mHandler.post(morphIntoSubnode);
+    case FAILED_SUPERNODE:
+      state = State.IN_TRANSITION;
+      trans = Transition.SEARCHING_FOR_SUPERNODE;
+      mHandler.post(evolveIntoSupernode);
     default:
       break;
     }
   }
 
   private class PostHTTPTask extends AsyncTask<HTTPRequestParams, Integer, String> {
-
+    private boolean failed = false;
     protected void onPostExecute(String result) {
       Toast message = Toast.makeText(getApplicationContext(), result, Toast.LENGTH_SHORT);
       message.show();
+      if (failed) {
+        //retry
+      }
       postResultsCleanup();
     } // end of onPostExecute
 
@@ -326,22 +369,22 @@ public class StrobeActivity extends Activity {
       String success = p.success;
       String failure = p.failure;
 
-      Log.d("PostHTTPTask", "Gathering HTTP POST message");
+      Log.d(TAG, "Gathering HTTP POST message");
       
       //debug
-      Log.d("PostHTTPTaskData", "what I'm sending follows:");
+      Log.d(TAG, "what I'm sending follows:");
       Iterator<NameValuePair> i = data.iterator();
       while (i.hasNext()) {
         NameValuePair pair = i.next();
-        Log.d("PostHTTPTaskData", pair.getName().toString() + ":" + pair.getValue());
+        Log.d(TAG, pair.getName().toString() + ":" + pair.getValue());
       }
-      Log.d("PostHTTPTaskData", "end POST data");
+      Log.d(TAG, "end POST data");
       
       HttpClient httpclient = new DefaultHttpClient();
       HttpPost httppost = new HttpPost(url);
 
       try {
-        Log.d("PostHTTPTask", "posting to " + url + " ...");
+        Log.d(TAG, "posting to " + url + " ...");
         
         httppost.setEntity(new UrlEncodedFormEntity(data));
 
@@ -349,7 +392,7 @@ public class StrobeActivity extends Activity {
         HttpResponse response = httpclient.execute(httppost);
 
         if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
-          Log.e("postHTTPRequest", "HTTP Response NOT OK " + Integer.toString(response.getStatusLine().getStatusCode()) +": " + response.getStatusLine().getReasonPhrase());
+          Log.e(TAG, "HTTP Response NOT OK " + Integer.toString(response.getStatusLine().getStatusCode()) +": " + response.getStatusLine().getReasonPhrase());
           return failure;
         }
 
@@ -360,7 +403,6 @@ public class StrobeActivity extends Activity {
         Log.e(TAG, e.getMessage());
         return failure;
       }
-
       return success;
     }
   }
@@ -392,42 +434,10 @@ public class StrobeActivity extends Activity {
     }
   };
 
-
   @Override
   protected void onPostCreate(Bundle savedInstanceState) {
     super.onPostCreate(savedInstanceState);
     delayedHide(100);
   }
 
-  /**
-   * Touch listener to use for in-layout UI controls to delay hiding the
-   * system UI. This is to prevent the jarring behavior of controls going away
-   * while interacting with activity UI.
-   */
-  View.OnTouchListener mDelayHideTouchListener = new View.OnTouchListener() {
-    @Override
-    public boolean onTouch(View view, MotionEvent motionEvent) {
-      if (AUTO_HIDE) {
-        delayedHide(AUTO_HIDE_DELAY_MILLIS);
-      }
-      return false;
-    }
-  };
-
-  Handler mHideHandler = new Handler();
-  Runnable mHideRunnable = new Runnable() {
-    @Override
-    public void run() {
-      mSystemUiHider.hide();
-    }
-  };
-
-  /**
-   * Schedules a call to hide() in [delay] milliseconds, canceling any
-   * previously scheduled calls.
-   */
-  private void delayedHide(int delayMillis) {
-    mHideHandler.removeCallbacks(mHideRunnable);
-    mHideHandler.postDelayed(mHideRunnable, delayMillis);
-  }
 }
