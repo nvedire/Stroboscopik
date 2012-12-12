@@ -106,7 +106,7 @@ public class GCMIntentService extends GCMBaseIntentService {
 		SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
 		SharedPreferences.Editor ed = settings.edit();
 		ed.putString(Constants.APP_CLUSTER_KEY, intent.getStringExtra(Constants.APP_GCM_CLUSTER_KEY));
-		ed.putInt(Constants.APP_FREQUENCY_KEY, intent.getIntExtra(Constants.APP_GCM_FREQUENCY_KEY, Constants.APP_DEFAULT_FREQ));
+		ed.putInt(Constants.APP_FREQUENCY_KEY, Integer.parseInt(intent.getStringExtra(Constants.APP_GCM_FREQUENCY_KEY)));
 		ed.commit();
 	}
 
