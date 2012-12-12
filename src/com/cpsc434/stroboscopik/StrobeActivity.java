@@ -93,18 +93,17 @@ public class StrobeActivity extends Activity {
   
   private static enum Transition {
     TO_SUPERNODE,
+    TO_SUBNODE,
     SEARCHING_FOR_SUPERNODE,
     NONE
   };
   
-  private State state = State.IDLE;
-  private Transition trans = Transition.NONE;
+  private static State state = State.IDLE;
+  private static Transition trans = Transition.NONE;
 
   private SystemUiHider mSystemUiHider;
   private Handler mHandler = new Handler(); //for dummy flashing
   private SharedPreferences settings;
-  private boolean isSuperNode = false;
-  private boolean searchingForSupernode = false; //make this a state
 
   public long flashTimeStamp = 0;
   
@@ -187,31 +186,50 @@ public class StrobeActivity extends Activity {
   }
   
   private void searchForSupernode() {
-    //for real deployment
     String uid = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-    long seed = new BigInteger(uid, 16).longValue();
+    long seed = new BigInteger(uid, 16).longValue() + System.currentTimeMillis();
     Random r = new Random(seed);
 
     double flip = r.nextDouble();
     int wait = 0;
+    
+    state = State.IN_TRANSITION;
+    trans = Transition.SEARCHING_FOR_SUPERNODE;
 
     if (flip < 0.7) {
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_LONG_WAIT);
       Log.d("waitForSupernode", "waiting " + Integer.toString(wait) + " milliseconds.");
-      mHandler.postDelayed(mBecomeSuperNode, wait);
+      mHandler.postDelayed(evolveIntoSupernode, wait);
     } else {
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_SHORT_WAIT);
       Log.d("waitForSupernode", "promoted; will become supernode soon.");
-      mHandler.postDelayed(mBecomeSuperNode, wait);
+      mHandler.postDelayed(evolveIntoSupernode, wait);
     }
   }
 
-  private Runnable mBecomeSuperNode = new Runnable() {
+  private Runnable evolveIntoSupernode = new Runnable() {
     public void run() {
-      if (isSuperNode) {
+      if (!(state == State.IN_TRANSITION && trans == Transition.SEARCHING_FOR_SUPERNODE) ) return;
+  
+      String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then BAD
+      if (regId == "") {
+        Log.e("evolveIntoSupernode", "regId null");
         return;
       }
-      evolveIntoSupernode();
+  
+      List<NameValuePair> data = new ArrayList<NameValuePair>();
+      data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
+  
+      HTTPRequestParams[] params = new HTTPRequestParams[1];
+      params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
+          "Success! You are now a supernode.",
+          "Failure: cannot contact servers");
+  
+      PostHTTPTask p = new PostHTTPTask();
+      
+      trans = Transition.TO_SUPERNODE;
+      
+      p.execute(params);
     }
   };
 
@@ -244,29 +262,6 @@ public class StrobeActivity extends Activity {
     //Log.d("UpdatePeriods", "new frequency: " + freq);
   }
 
-  private void evolveIntoSupernode() {
-    if (state == State.SUPERNODE) return;
-
-    searchingForSupernode = true;
-
-    String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then BAD
-    if (regId == "") {
-      Log.e("initializeSuperNode", "regId null");
-      return;
-    }
-
-    List<NameValuePair> data = new ArrayList<NameValuePair>();
-    data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
-
-    HTTPRequestParams[] params = new HTTPRequestParams[1];
-    params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
-        "Success! You are now a supernode.",
-        "Failure: cannot contact servers");
-
-    PostHTTPTask p = new PostHTTPTask();
-    p.execute(params);
-  }
-  
 
   private void onBecomeSubnode() {
     String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
@@ -291,12 +286,34 @@ public class StrobeActivity extends Activity {
     PostHTTPTask p = new PostHTTPTask();
     p.execute(params);
   }
+ 
+  //do any post results cleanup if necessary; also retry if necessary
+  private void postResultsCleanup()
+  {
+    switch (trans) {
+    case NONE:
+      break;
+    case SEARCHING_FOR_SUPERNODE:
+      break;
+    case TO_SUBNODE:
+      state = State.SUBNODE;
+      trans = Transition.NONE;
+      break;
+    case TO_SUPERNODE:
+      state = State.SUPERNODE;
+      trans = Transition.NONE;
+      break;
+    default:
+      break;
+    }
+  }
 
   private class PostHTTPTask extends AsyncTask<HTTPRequestParams, Integer, String> {
 
     protected void onPostExecute(String result) {
       Toast message = Toast.makeText(getApplicationContext(), result, Toast.LENGTH_SHORT);
       message.show();
+      postResultsCleanup();
     } // end of onPostExecute
 
     @Override
@@ -372,7 +389,6 @@ public class StrobeActivity extends Activity {
       if (r != restR || g != restG || b != restB ) {
         mHandler.postDelayed(this, 5);
       }
-
     }
   };
 
