@@ -82,14 +82,31 @@ public class StrobeActivity extends Activity {
   private static int flashR = 186;
   private static int flashG = 1;
   private static int flashB = 255;
+  
+  private static enum State {
+    IDLE,
+    ORPHAN,
+    SUBNODE,
+    SUPERNODE,
+    IN_TRANSITION
+  };
+  
+  private static enum Transition {
+    TO_SUPERNODE,
+    TO_SUBNODE,
+    SEARCHING_FOR_SUPERNODE,
+    NONE
+  };
+  
+  private static State state = State.IDLE;
+  private static Transition trans = Transition.NONE;
 
   private SystemUiHider mSystemUiHider;
   private Handler mHandler = new Handler(); //for dummy flashing
-  public long flashTimeStamp = 0;
-  private	SharedPreferences settings;
-  private boolean isSuperNode = false;
-  private boolean searchingForSupernode = false; //make this a state
+  private SharedPreferences settings;
 
+  public long flashTimeStamp = 0;
+  
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -112,14 +129,11 @@ public class StrobeActivity extends Activity {
     final View contentView = findViewById(R.id.fullscreen_content);
 
     startFlashing();
-    // Set up an instance of SystemUiHider to control the system UI for
-    // this activity.
     mSystemUiHider = SystemUiHider.getInstance(this, contentView,
         HIDER_FLAGS);
     mSystemUiHider.setup();
     mSystemUiHider
     .setOnVisibilityChangeListener(new SystemUiHider.OnVisibilityChangeListener() {
-      // Cached values.
       int mControlsHeight;
       int mShortAnimTime;
 
@@ -127,10 +141,6 @@ public class StrobeActivity extends Activity {
       @TargetApi(Build.VERSION_CODES.HONEYCOMB_MR2)
       public void onVisibilityChange(boolean visible) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR2) {
-          // If the ViewPropertyAnimator API is available
-          // (Honeycomb MR2 and later), use it to animate the
-          // in-layout UI controls at the bottom of the
-          // screen.
           if (mControlsHeight == 0) {
             mControlsHeight = controlsView.getHeight();
           }
@@ -143,21 +153,16 @@ public class StrobeActivity extends Activity {
           .translationY(visible ? 0 : mControlsHeight)
           .setDuration(mShortAnimTime);
         } else {
-          // If the ViewPropertyAnimator APIs aren't
-          // available, simply show or hide the in-layout UI
-          // controls.
           controlsView.setVisibility(visible ? View.VISIBLE
               : View.GONE);
         }
 
         if (visible && AUTO_HIDE) {
-          // Schedule a hide().
           delayedHide(AUTO_HIDE_DELAY_MILLIS);
         }
       }
     });
 
-    // Set up the user interaction to manually show or hide the system UI.
     contentView.setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View view) {
@@ -169,28 +174,71 @@ public class StrobeActivity extends Activity {
       }
     });
 
-    // Upon interacting with UI controls, delay any scheduled hide()
-    // operations to prevent the jarring behavior of controls going away
-    // while interacting with the UI.
     findViewById(R.id.dummy_button).setOnTouchListener(
         mDelayHideTouchListener);
 
     findViewById(R.id.dummy_button).setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View v) {
-        waitForSupernode();
-        //onBecomeSubnode();
+        searchForSupernode();
       }
     });
   }
+  
+  private void searchForSupernode() {
+    String uid = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+    long seed = new BigInteger(uid, 16).longValue() + System.currentTimeMillis();
+    Random r = new Random(seed);
+
+    double flip = r.nextDouble();
+    int wait = 0;
+    
+    state = State.IN_TRANSITION;
+    trans = Transition.SEARCHING_FOR_SUPERNODE;
+
+    if (flip < 0.7) {
+      wait = (int) (r.nextDouble() * Constants.APP_STARTUP_LONG_WAIT);
+      Log.d("waitForSupernode", "waiting " + Integer.toString(wait) + " milliseconds.");
+      mHandler.postDelayed(evolveIntoSupernode, wait);
+    } else {
+      wait = (int) (r.nextDouble() * Constants.APP_STARTUP_SHORT_WAIT);
+      Log.d("waitForSupernode", "promoted; will become supernode soon.");
+      mHandler.postDelayed(evolveIntoSupernode, wait);
+    }
+  }
+
+  private Runnable evolveIntoSupernode = new Runnable() {
+    public void run() {
+      if (!(state == State.IN_TRANSITION && trans == Transition.SEARCHING_FOR_SUPERNODE) ) return;
+  
+      String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then BAD
+      if (regId == "") {
+        Log.e("evolveIntoSupernode", "regId null");
+        return;
+      }
+  
+      List<NameValuePair> data = new ArrayList<NameValuePair>();
+      data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
+  
+      HTTPRequestParams[] params = new HTTPRequestParams[1];
+      params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
+          "Success! You are now a supernode.",
+          "Failure: cannot contact servers");
+  
+      PostHTTPTask p = new PostHTTPTask();
+      
+      trans = Transition.TO_SUPERNODE;
+      
+      p.execute(params);
+    }
+  };
 
   private void startFlashing() {
     mHandler.postDelayed(mFlashTask, 1000);
   }
 
-  private Runnable mFlashTask = new Runnable() {
+  private Runnable mFlashTask = new Runnable() { //this is terrible
     public void run() {
-
       updatePeriods();
 
       final View contentView = findViewById(R.id.fullscreen_content);
@@ -211,32 +259,9 @@ public class StrobeActivity extends Activity {
     } else {
       flashPeriod = Constants.APP_DEFAULT_FADE;
     }
-    Log.d("UpdatePeriods", "new frequency: " + freq);
+    //Log.d("UpdatePeriods", "new frequency: " + freq);
   }
 
-  private void evolveIntoSupernode() {
-    if (searchingForSupernode) return;
-    //TODO Dave: should be a robust mechanism for ensuring this doesn't get called multiple times, maybe states?
-
-    searchingForSupernode = true;
-
-    String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then BAD
-    if (regId == "") {
-      Log.e("initializeSuperNode", "regId null");
-      return;
-    }
-
-    List<NameValuePair> data = new ArrayList<NameValuePair>();
-    data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
-
-    HTTPRequestParams[] params = new HTTPRequestParams[1];
-    params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
-        "Success! You are now a supernode.",
-        "Failure: cannot contact servers");
-
-    PostHTTPTask p = new PostHTTPTask();
-    p.execute(params);
-  }
 
   private void onBecomeSubnode() {
     String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
@@ -261,12 +286,34 @@ public class StrobeActivity extends Activity {
     PostHTTPTask p = new PostHTTPTask();
     p.execute(params);
   }
+ 
+  //do any post results cleanup if necessary; also retry if necessary
+  private void postResultsCleanup()
+  {
+    switch (trans) {
+    case NONE:
+      break;
+    case SEARCHING_FOR_SUPERNODE:
+      break;
+    case TO_SUBNODE:
+      state = State.SUBNODE;
+      trans = Transition.NONE;
+      break;
+    case TO_SUPERNODE:
+      state = State.SUPERNODE;
+      trans = Transition.NONE;
+      break;
+    default:
+      break;
+    }
+  }
 
   private class PostHTTPTask extends AsyncTask<HTTPRequestParams, Integer, String> {
 
     protected void onPostExecute(String result) {
       Toast message = Toast.makeText(getApplicationContext(), result, Toast.LENGTH_SHORT);
       message.show();
+      postResultsCleanup();
     } // end of onPostExecute
 
     @Override
@@ -275,7 +322,6 @@ public class StrobeActivity extends Activity {
 
       String url = p.url;
       List<NameValuePair> data = p.data;
-      
 
       String success = p.success;
       String failure = p.failure;
@@ -320,7 +366,7 @@ public class StrobeActivity extends Activity {
   }
 
 
-  private Runnable mFadeTask = new Runnable() {
+  private Runnable mFadeTask = new Runnable() { //make this faster
     public void run() {
       final View contentView = findViewById(R.id.fullscreen_content);
       long elapsed = System.currentTimeMillis() - flashTimeStamp;
@@ -343,38 +389,9 @@ public class StrobeActivity extends Activity {
       if (r != restR || g != restG || b != restB ) {
         mHandler.postDelayed(this, 5);
       }
-
     }
   };
 
-  private void waitForSupernode() {
-    //for real deployment
-    String uid = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-    long seed = new BigInteger(uid, 16).longValue();
-    Random r = new Random(seed);
-
-    double flip = r.nextDouble();
-    int wait = 0;
-
-    if (flip < 0.7) {
-      wait = (int) (r.nextDouble() * Constants.APP_STARTUP_LONG_WAIT);
-      Log.d("waitForSupernode", "waiting " + Integer.toString(wait) + " milliseconds.");
-      mHandler.postDelayed(mBecomeSuperNode, wait);
-    } else {
-      wait = (int) (r.nextDouble() * Constants.APP_STARTUP_SHORT_WAIT);
-      Log.d("waitForSupernode", "promoted; will become supernode soon.");
-      mHandler.postDelayed(mBecomeSuperNode, wait);
-    }
-  }
-
-  private Runnable mBecomeSuperNode = new Runnable() {
-    public void run() {
-      if (isSuperNode) {
-        return;
-      }
-      evolveIntoSupernode();
-    }
-  };
 
   @Override
   protected void onPostCreate(Bundle savedInstanceState) {
