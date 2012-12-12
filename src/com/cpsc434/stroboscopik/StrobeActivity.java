@@ -82,6 +82,12 @@ public class StrobeActivity extends Activity {
   private static int flashR = 186;
   private static int flashG = 1;
   private static int flashB = 255;
+  
+  private enum State {
+    ORPHAN,
+    SUBNODE,
+    SUPERNODE
+  }
 
   private SystemUiHider mSystemUiHider;
   private Handler mHandler = new Handler(); //for dummy flashing
@@ -211,7 +217,7 @@ public class StrobeActivity extends Activity {
     } else {
       flashPeriod = Constants.APP_DEFAULT_FADE;
     }
-    Log.d("UpdatePeriods", "new frequency: " + freq);
+    //Log.d("UpdatePeriods", "new frequency: " + freq);
   }
 
   private void evolveIntoSupernode() {
