@@ -54,7 +54,7 @@
         </receiver>
 
         <service
-            android:name="com.cpsc434.stroboscopik.GCMIntentService" >
+            android:name=".GCMIntentService" >
         </service>
     </application>
 
