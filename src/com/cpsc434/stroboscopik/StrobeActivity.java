@@ -211,7 +211,7 @@ public class StrobeActivity extends Activity {
     } else {
       flashPeriod = Constants.APP_DEFAULT_FADE;
     }
-    //Log.d("UpdatePeriods", "new frequency: " + freq);
+    Log.d("UpdatePeriods", "new frequency: " + freq);
   }
 
   private void evolveIntoSupernode() {
@@ -227,7 +227,7 @@ public class StrobeActivity extends Activity {
     }
 
     List<NameValuePair> data = new ArrayList<NameValuePair>();
-    data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
+    data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
 
     HTTPRequestParams[] params = new HTTPRequestParams[1];
     params[0] = new HTTPRequestParams(Constants.APP_SUPER_URL, data,
@@ -241,7 +241,7 @@ public class StrobeActivity extends Activity {
   private void onBecomeSubnode() {
     String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
     if (regId == "") {
-      Log.e("onAcquiredSuperNode", "regId null");
+      Log.e("onBecomeSubnode", "regId null");
       return;
     }
 
