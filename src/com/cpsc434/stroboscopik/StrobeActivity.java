@@ -143,6 +143,12 @@ public class StrobeActivity extends Activity {
       @Override
       @TargetApi(Build.VERSION_CODES.HONEYCOMB_MR2)
       public void onVisibilityChange(boolean visible) {
+        if (state == State.IDLE) {
+          controlsView.setAlpha(1.f);
+          return;
+        }
+        
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR2) {
           if (mShortAnimTime == 0) {
             mShortAnimTime = getResources().getInteger(
