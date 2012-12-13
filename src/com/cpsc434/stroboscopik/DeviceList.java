@@ -6,7 +6,7 @@ import java.util.ArrayList;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.Service;
+import android.app.IntentService;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -14,10 +14,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.os.Binder;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
 import android.util.Log;
 
 
@@ -28,10 +27,9 @@ import android.util.Log;
  * Activity in the result Intent.
  */
 @SuppressLint("NewApi")
-public class DeviceList extends Service {
+public class DeviceList extends IntentService {
 	
-	SharedPreferences BTPrefs;
-	String data_strings = "com.example.bluetoothcom";
+	SharedPreferences settings;
 	// Debugging
     private static final String TAG = "DeviceList";
     private static final boolean D = true;
@@ -45,22 +43,24 @@ public class DeviceList extends Service {
     private String cluster_id;
     private int c_id_length;
     private long startedAt;
+    private int result = Activity.RESULT_CANCELED;
+    public long time_stamp;
+    private Intent intent;
     
-    private final IBinder mBinder = new DeviceBinder();
+    public DeviceList() {
+        super("DeviceList");
+      }
     
- 
-    
-    //@Override
-    protected void onCreate(Bundle savedInstanceState) {
-        //super.onCreate(savedInstanceState);
-        
+    @Override
+    protected void onHandleIntent(Intent intent) {
+    	
+    	 
         startedAt = System.currentTimeMillis();
         if ((System.currentTimeMillis() - startedAt) > 10*1000) {
             outData();
             stopSelf();
           }
-        // Set result CANCELED in case the user backs out
-        //setResult(Activity.RESULT_CANCELED);
+
         // Get the local Bluetooth adapter
         mBtAdapter = BluetoothAdapter.getDefaultAdapter();
 
@@ -72,47 +72,56 @@ public class DeviceList extends Service {
                 // Register for broadcasts when discovery has finished
                 filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
                 this.registerReceiver(mReceiver, filter);
+        
                 
-                
-                BTPrefs = getSharedPreferences(data_strings,0);
-                cluster_id = BTPrefs.getString("C_ID","C01");
-                c_id_length = (int) BTPrefs.getLong("C_ID_length",3);
-               
-        }
+                settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
+                cluster_id = settings.getString("C_ID","C01");
+                c_id_length = (int) settings.getLong("C_ID_length",3);
+     
+        // Sucessful finished
+    }
     
-    
-        public void outData() {
-            // Cancel discovery because it's costly and we're about to connect
-            mBtAdapter.cancelDiscovery();
-            
-            if (discovered_devices.size() != 0) {
-            	
-            // Create the result Intent and include the timestamp info
-            	Intent intent = new Intent();
+    public void outData() {
+        // Cancel discovery because it's costly and we're about to connect
+        mBtAdapter.cancelDiscovery();
+        
 
-                // for some reason, I remember a posting saying it's best to create a new
-                // object to pass.  I have no idea why..
-                ArrayList <String> addyExtras = new ArrayList <String>();
-
-                for (int i = 0; i < discovered_devices.size(); i++)
-                    addyExtras.add (discovered_devices.get(i));
-
-                intent.putStringArrayListExtra (EXTRA_DEVICE_ADDRESS, addyExtras);
-
-            // Set result and finish this Activity
-            //setResult(Activity.RESULT_OK, intent); ------- do something
-                }
-            else{
-            //	setResult(Activity.RESULT_CANCELED);-------- do something
-            }
+        // Set result and finish this Activity
+        if (discovered_devices.size() != 0){
+        	String Adname = settings.getString("C_ID",null) + "System.currentTimeMillis()";
+      	    boolean b=mBtAdapter.setName(Adname);
+      	    if(b){
+        	    int i=discovered_devices.size();
+        	    long sum=0;
+        	    for(int j=0;j<i;j++){
+        	    	String adapName = discovered_devices.get(j);
+        	    	String time = adapName.substring(c_id_length,adapName.length());
+        	    	sum = sum + Long.valueOf(time).longValue(); 
+        	    	
+        	    }
+        	    time_stamp = sum;
+      	    }
+        	result = Activity.RESULT_OK;
         }
-    
-        public class DeviceBinder extends Binder {
-            DeviceList getService() {
-                // Return this instance of LocalService so clients can call public methods
-                return DeviceList.this;
-            }
+        else {
+        	result = Activity.RESULT_CANCELED;
         }
+        
+        Bundle extras = intent.getExtras();
+        if (extras != null) {
+          Messenger messenger = (Messenger) extras.get("MESSENGER");
+          Message msg = Message.obtain();
+          msg.arg1 = result;
+          msg.arg2 = 1;
+          msg.obj = time_stamp;
+          try {
+            messenger.send(msg);
+          } catch (android.os.RemoteException e1) {
+            Log.w(getClass().getName(), "Exception sending message", e1);
+          }
+        }
+        
+    }  
 
    // @Override
     public void onDestroy() {
@@ -164,11 +173,5 @@ public class DeviceList extends Service {
         }
     };
 
-
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return mBinder;
-    }
 
 }

@@ -55,7 +55,8 @@
             </intent-filter>
         </receiver>
 
-        <service android:name="com.cpsc434.stroboscopik.GCMIntentService" >
+        <service
+            android:name=".GCMIntentService" >
         </service>
 
         <service

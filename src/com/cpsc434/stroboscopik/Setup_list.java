@@ -2,8 +2,6 @@ package com.cpsc434.stroboscopik;
 
 import java.util.ArrayList;
 
-import com.cpsc434.stroboscopik.DeviceList.DeviceBinder;
-
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -35,9 +33,9 @@ public class Setup_list extends IntentService {
     private ArrayList<String> discovered_devices = new ArrayList<String>();
     private String cluster_id;
     private int c_id_length;
-    private long startedAt;
     private int result = Activity.RESULT_CANCELED;
     private Intent intent;
+    private long startedAt;
     
     public Setup_list() {
         super("Setup_list");
@@ -46,9 +44,11 @@ public class Setup_list extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
     	
-    	startedAt = System.currentTimeMillis();
-        if ((System.currentTimeMillis() - startedAt) > 30*1000) {
+    	 
+        startedAt = System.currentTimeMillis();
+        if ((System.currentTimeMillis() - startedAt) > 10*1000) {
             outData();
+            stopSelf();
           }
 
         // Get the local Bluetooth adapter
@@ -87,6 +87,7 @@ public class Setup_list extends IntentService {
               Messenger messenger = (Messenger) extras.get("MESSENGER");
               Message msg = Message.obtain();
               msg.arg1 = result;
+              msg.arg2 = 0;
               try {
                 messenger.send(msg);
               } catch (android.os.RemoteException e1) {

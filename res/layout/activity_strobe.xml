@@ -2,7 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0099cc"
+    android:background="#000000"
     tools:context=".StrobeActivity" >
 
     <!--
@@ -37,6 +37,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="@dimen/Bottom"
             android:background="@color/black_overlay"
             android:orientation="horizontal"
             tools:ignore="UselessParent" >
@@ -47,8 +48,9 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-		        android:textSize="42sp"
-                android:text="@string/dummy_button" />
+                android:text="@string/dummy_button"
+                android:textSize="42sp" />
+
         </LinearLayout>
     </FrameLayout>
 
