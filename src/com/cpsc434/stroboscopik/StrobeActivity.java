@@ -19,18 +19,25 @@ import org.apache.http.message.BasicNameValuePair;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Toast;
 
+import com.cpsc434.stroboscopik.BTsetup.BTbinder;
 import com.cpsc434.stroboscopik.util.SystemUiHider;
 import com.google.android.gcm.GCMRegistrar;
 
@@ -95,10 +102,42 @@ public class StrobeActivity extends Activity {
   private	SharedPreferences settings;
   private boolean isSuperNode = false;
   private boolean searchingForSupernode = false; //make this a state
+  
+  
+  //Bluetooth Stuff
+  private BluetoothAdapter mAdapter;
+  public static final int REQUEST_ENABLE_BT = 1;
+  public static final int REQUEST_SETUP = 2;
+  public static final int REQUEST_TIMESTAMP = 3;
+  BTsetup btService;
+  boolean mBound = false;
+
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    
+    //Bluetooth Availability check
+    mAdapter = BluetoothAdapter.getDefaultAdapter();
+
+    // If the adapter is null, then Bluetooth is not supported
+    if (mAdapter == null) {
+        Toast.makeText(this, "Bluetooth is not available. Exiting Application", Toast.LENGTH_LONG).show();
+        finish();
+        return;
+    }else{
+    //If adapter available, remember adapter name and write it into shared preferences
+    settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
+    SharedPreferences.Editor editor = settings.edit();
+	String Adname = mAdapter.getName();
+	editor.putString("OrigAdapName",Adname);
+	editor.commit();
+	
+	Intent intent = new Intent(this, BTsetup.class);
+    bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+    
+    }
+	//end of Bluetooth Availability check
 
     // Check for GCM Registration. Register if not registered
     GCMRegistrar.checkDevice(this);
@@ -184,11 +223,101 @@ public class StrobeActivity extends Activity {
     findViewById(R.id.dummy_button).setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View v) {
+    	btService.ensureDiscoverable();
         waitForSupernode();
         //onBecomeSubnode();
       }
     });
   }
+  
+  //Bluetooth initialization and setup for handling on resume, on pause, on stop, on detroy
+  @Override
+  public void onStart() {
+      super.onStart();
+      Log.e(TAG, "On Start - Enabling BT");
+
+      // If BT is not on, request that it be enabled.
+      if (!mAdapter.isEnabled()) {
+          Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+          startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
+      }else {
+    	  btService.ensureDiscoverable();
+          btService.SetupCluster();
+      }
+  }
+  
+  @Override
+  public synchronized void onResume() {
+      super.onResume();
+      Log.e(TAG, "On Resume - Start BT");
+      // If BT is not on, request that it be enabled.
+      if (!mAdapter.isEnabled()) {
+          Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+          startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
+      }else {
+    	  btService.ensureDiscoverable();
+          btService.SetupCluster();
+      }
+  }
+  
+  @Override
+  public synchronized void onPause() {
+      super.onPause();
+      Log.e(TAG, "- ON PAUSE -");
+      
+      // Setting Adapter name to original Default
+      String Adname = settings.getString("OrigAdapName","MyBT");
+  	  boolean b=mAdapter.setName(Adname);
+  	  
+  	  // Stopping Discoverbale Mode
+  	if(b){
+  		Intent discoverableintent = new
+  		Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+  		discoverableintent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 1);
+  		startActivity(discoverableintent);
+  	}
+  	
+  }
+  
+  @Override
+  public void onStop() {
+      super.onStop();
+      Log.e(TAG, "-- ON STOP --");
+      
+   // Setting Adapter name to original Default
+      String Adname = settings.getString("OrigAdapName","My_BT");
+  	boolean b=mAdapter.setName(Adname);
+  	
+   // Stopping Discoverbale Mode
+  	if(b){
+  		Intent discoverableintent = new
+  		Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+  		discoverableintent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 1);
+  		startActivity(discoverableintent);
+  	}
+      
+  }
+  
+  
+  /** Defines callbacks for service binding, passed to bindService() */
+  private ServiceConnection mConnection = new ServiceConnection() {
+
+      @Override
+      public void onServiceConnected(ComponentName className,
+              IBinder service) {
+          // We've bound to BTsetup, cast the IBinder and get BTsetup instance
+          BTbinder binder = (BTbinder) service;
+          btService = binder.getService();
+          mBound = true;
+      }
+
+      @Override
+      public void onServiceDisconnected(ComponentName arg0) {
+          mBound = false;
+      }
+  };
+
+//End of handling Bluetooth initalization and quitting
 
   private void startFlashing() {
     mHandler.postDelayed(mFlashTask, 1000);
@@ -419,4 +548,24 @@ public class StrobeActivity extends Activity {
     mHideHandler.removeCallbacks(mHideRunnable);
     mHideHandler.postDelayed(mHideRunnable, delayMillis);
   }
+  
+  //bluetooth on - off intent result code handler
+  
+  public void onActivityResult(int requestCode, int resultCode, Intent data) {
+      if(requestCode ==REQUEST_ENABLE_BT){
+          // When the request to enable Bluetooth returns
+      	 
+      	if (resultCode == Activity.RESULT_OK) {
+              // Bluetooth is now enabled,ensure discoverability
+          	btService.ensureDiscoverable();
+          	btService.SetupCluster();
+          } else {
+              // User did not enable Bluetooth or an error occurred
+              Log.d(TAG, "BT not enabled");
+              Toast.makeText(this, R.string.bt_not_enabled_leaving, Toast.LENGTH_SHORT).show();
+              finish();
+          }
+      }
+  }
 }
+

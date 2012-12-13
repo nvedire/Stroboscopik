@@ -2,8 +2,16 @@ package com.cpsc434.stroboscopik;
 
 import java.util.ArrayList;
 
+import com.cpsc434.stroboscopik.DeviceList.DeviceBinder;
+
+import android.os.Binder;
 import android.os.Bundle;
+import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
 import android.app.Activity;
+import android.app.IntentService;
+import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -13,10 +21,10 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.util.Log;
 
-public class Setup_list extends Activity {
+public class Setup_list extends IntentService {
 
-	SharedPreferences BTPrefs;
-	String data_strings = "com.cpsc434.stroboscopik";
+	SharedPreferences settings;
+	//String data_strings = "com.cpsc434.stroboscopik";
 	// Debugging
     private static final String TAG = "SetupList";
     private static final boolean D = true;
@@ -28,20 +36,21 @@ public class Setup_list extends Activity {
     private String cluster_id;
     private int c_id_length;
     private long startedAt;
+    private int result = Activity.RESULT_CANCELED;
+    private Intent intent;
     
- 
+    public Setup_list() {
+        super("Setup_list");
+      }
     
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        
-        startedAt = System.currentTimeMillis();
+    protected void onHandleIntent(Intent intent) {
+    	
+    	startedAt = System.currentTimeMillis();
         if ((System.currentTimeMillis() - startedAt) > 30*1000) {
             outData();
-            finish();
           }
-        // Set result CANCELED in case the user backs out
-        setResult(Activity.RESULT_CANCELED);
+
         // Get the local Bluetooth adapter
         mBtAdapter = BluetoothAdapter.getDefaultAdapter();
 
@@ -53,11 +62,13 @@ public class Setup_list extends Activity {
                 // Register for broadcasts when discovery has finished
                 filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
                 this.registerReceiver(mReceiver, filter);
-                BTPrefs = getSharedPreferences(data_strings,0);
-                c_id_length = (int) BTPrefs.getLong("C_ID_length",3);
-               
-        }
-    
+        
+                
+                settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_PRIVATE);
+                c_id_length = (int) settings.getLong("C_ID_length",3);
+     
+        // Sucessful finished
+    }
     
         public void outData() {
             // Cancel discovery because it's costly and we're about to connect
@@ -66,18 +77,27 @@ public class Setup_list extends Activity {
 
             // Set result and finish this Activity
             if (discovered_devices.size() != 0){
-            setResult(Activity.RESULT_OK);}
+            result = Activity.RESULT_OK;}
             else {
-            	setResult(Activity.RESULT_CANCELED);
+            	result = Activity.RESULT_CANCELED;
             }
-        }
-        
-    
-    
+            
+            Bundle extras = intent.getExtras();
+            if (extras != null) {
+              Messenger messenger = (Messenger) extras.get("MESSENGER");
+              Message msg = Message.obtain();
+              msg.arg1 = result;
+              try {
+                messenger.send(msg);
+              } catch (android.os.RemoteException e1) {
+                Log.w(getClass().getName(), "Exception sending message", e1);
+              }
+            }
+        }  
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
+  //  @Override
+    public void onDestroy() {
+    //    super.onDestroy();
 
         // Make sure we're not doing discovery anymore
         if (mBtAdapter != null) {
@@ -119,8 +139,7 @@ public class Setup_list extends Activity {
                     	cluster_id = dev_name.substring(0,c_id_length);  
                 	    boolean b = mBtAdapter.setName(cluster_id);
                 	    if (b){
-                	    	BTPrefs = getSharedPreferences(data_strings,0);
-                	        SharedPreferences.Editor editor = BTPrefs.edit();
+                	        SharedPreferences.Editor editor = settings.edit();
                 	    	editor.putString("C_ID",cluster_id);
                 	    	editor.commit();
                 	    	outData();
@@ -136,4 +155,5 @@ public class Setup_list extends Activity {
         }
     };
 
-}
+
+ }

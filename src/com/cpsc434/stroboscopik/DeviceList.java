@@ -3,8 +3,10 @@ package com.cpsc434.stroboscopik;
 import java.util.ArrayList;
 
 
+
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -12,7 +14,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.os.Binder;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
 import android.util.Log;
 
 
@@ -23,7 +28,7 @@ import android.util.Log;
  * Activity in the result Intent.
  */
 @SuppressLint("NewApi")
-public class DeviceList extends Activity {
+public class DeviceList extends Service {
 	
 	SharedPreferences BTPrefs;
 	String data_strings = "com.example.bluetoothcom";
@@ -41,19 +46,21 @@ public class DeviceList extends Activity {
     private int c_id_length;
     private long startedAt;
     
+    private final IBinder mBinder = new DeviceBinder();
+    
  
     
-    @Override
+    //@Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        //super.onCreate(savedInstanceState);
         
         startedAt = System.currentTimeMillis();
         if ((System.currentTimeMillis() - startedAt) > 10*1000) {
             outData();
-            finish();
+            stopSelf();
           }
         // Set result CANCELED in case the user backs out
-        setResult(Activity.RESULT_CANCELED);
+        //setResult(Activity.RESULT_CANCELED);
         // Get the local Bluetooth adapter
         mBtAdapter = BluetoothAdapter.getDefaultAdapter();
 
@@ -65,6 +72,8 @@ public class DeviceList extends Activity {
                 // Register for broadcasts when discovery has finished
                 filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
                 this.registerReceiver(mReceiver, filter);
+                
+                
                 BTPrefs = getSharedPreferences(data_strings,0);
                 cluster_id = BTPrefs.getString("C_ID","C01");
                 c_id_length = (int) BTPrefs.getLong("C_ID_length",3);
@@ -91,17 +100,23 @@ public class DeviceList extends Activity {
                 intent.putStringArrayListExtra (EXTRA_DEVICE_ADDRESS, addyExtras);
 
             // Set result and finish this Activity
-            setResult(Activity.RESULT_OK, intent);}
+            //setResult(Activity.RESULT_OK, intent); ------- do something
+                }
             else{
-            	setResult(Activity.RESULT_CANCELED);
+            //	setResult(Activity.RESULT_CANCELED);-------- do something
             }
         }
     
-    
+        public class DeviceBinder extends Binder {
+            DeviceList getService() {
+                // Return this instance of LocalService so clients can call public methods
+                return DeviceList.this;
+            }
+        }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
+   // @Override
+    public void onDestroy() {
+     //   super.onDestroy();
 
         // Make sure we're not doing discovery anymore
         if (mBtAdapter != null) {
@@ -148,5 +163,12 @@ public class DeviceList extends Activity {
             }
         }
     };
+
+
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return mBinder;
+    }
 
 }
