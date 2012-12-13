@@ -41,41 +41,24 @@ import com.google.android.gcm.GCMRegistrar;
  * @see SystemUiHider
  */
 public class StrobeActivity extends Activity {
-  //TAG for Log messages in this class
   private static final String TAG = "StrobeActivity";
-
-  /**
-   * Whether or not the system UI should be auto-hidden after
-   * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
-   */
+  
+  //default template vars
   private static final boolean AUTO_HIDE = true;
-
-  /**
-   * If {@link #AUTO_HIDE} is set, the number of milliseconds to wait after
-   * user interaction before hiding the system UI.
-   */
   private static final int AUTO_HIDE_DELAY_MILLIS = 3000;
-
-  /**
-   * If set, will toggle the system UI visibility upon interaction. Otherwise,
-   * will show the system UI visibility upon interaction.
-   */
   private static final boolean TOGGLE_ON_CLICK = true;
 
-  /**
-   * The flags to pass to {@link SystemUiHider#getInstance}.
-   */
   private static final int HIDER_FLAGS = SystemUiHider.FLAG_HIDE_NAVIGATION;
 
-  /**
-   * The instance of the {@link SystemUiHider} for this activity.
-   */
-
+  //pertinent variables for GCM to modify
+  public static int freq = Constants.APP_DEFAULT_FREQ;
+  public static int cluster = -1;
+  private static double flashPeriod = 150.0; //the period of time when the screen is "white" or in strobing state
+  private static int restPeriod = 300; //the period of time when the screen is "black" or in resting state
+  
   //define resting color
-  private static int restR = 0;
-  private static int restG = 0;
-  private static int restB = 0;
-
+  private int restColor = Color.argb(0, 0, 0, 0);
+  
   //define flashing color
   private static int flashR = 186;
   private static int flashG = 1;
@@ -89,10 +72,6 @@ public class StrobeActivity extends Activity {
     IN_TRANSITION
   };
   
-  public static int freq = Constants.APP_DEFAULT_FREQ;
-  private static double flashPeriod = 150.0; //the period of time when the screen is "white" or in strobing state
-  private static int restPeriod = 300; //the period of time when the screen is "black" or in resting state
-  
   //transition states
   private static enum Transition {
     SUPERNODE_PENDING_SERVER_VALIDATION, //in case server can't be contacted
@@ -103,6 +82,17 @@ public class StrobeActivity extends Activity {
     FAILED_SUPERNODE,
     SEARCHING_FOR_SUPERNODE,
     NONE
+  };
+ 
+  private static int[] defaultColors = { 
+    Constants.APP_COLOR_LIME,
+    Constants.APP_COLOR_GREEN,
+    Constants.APP_COLOR_BLUE,
+    Constants.APP_COLOR_PURPLE,
+    Constants.APP_COLOR_PINK,
+    Constants.APP_COLOR_RED,
+    Constants.APP_COLOR_ORANGE,
+    Constants.APP_COLOR_YELLOW
   };
   
   private static State state = State.IDLE;
@@ -186,6 +176,7 @@ public class StrobeActivity extends Activity {
     findViewById(R.id.dummy_button).setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View v) {
+        state = State.ORPHAN;
         searchForSupernode();
       }
     });
@@ -219,13 +210,13 @@ public class StrobeActivity extends Activity {
     long seed = new BigInteger(uid, 16).longValue() + System.currentTimeMillis();
     Random r = new Random(seed);
 
-    double flip = r.nextDouble();
+    double flip = r.nextDouble(); //weighted coin flip
     int wait = 0;
     
     state = State.IN_TRANSITION;
     trans = Transition.SEARCHING_FOR_SUPERNODE;
 
-    if (flip < 0.7) {
+    if (flip > Constants.APP_STARTUP_PROMOTION_THRESH) {
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_LONG_WAIT);
       Log.d(TAG, "waiting " + Integer.toString(wait) + " milliseconds for a supernode.");
       mHandler.postDelayed(evolveIntoSupernode, wait);
@@ -267,7 +258,7 @@ public class StrobeActivity extends Activity {
   private Runnable mFlashTask = new Runnable() { //this is terrible
     public void run() {
       final View contentView = findViewById(R.id.fullscreen_content);
-      contentView.setBackgroundColor(Color.argb(255, flashR, flashG, flashB));
+      contentView.setBackgroundColor(getFlashColor());
       flashTimeStamp = System.currentTimeMillis();
 
       mHandler.post(mFadeTask);
@@ -328,14 +319,20 @@ public class StrobeActivity extends Activity {
     case SEARCHING_FOR_SUPERNODE:
       break;
     case SUBNODE_PENDING_SERVER_VALIDATION:
-      state = State.SUBNODE;
-      trans = Transition.NONE;
+      trans = Transition.SUBNODE_PENDING_GCM;
       startFlashing();
       break;
+    case SUBNODE_PENDING_GCM:
+      state = State.SUBNODE;
+      trans = Transition.NONE;
+      break;
     case SUPERNODE_PENDING_SERVER_VALIDATION:
+      trans = Transition.SUPERNODE_PENDING_GCM;
+      startFlashing();
+      break;
+    case SUPERNODE_PENDING_GCM:
       state = State.SUPERNODE;
       trans = Transition.NONE;
-      startFlashing();
       break;
     case FAILED_SUBNODE:
       state = State.IN_TRANSITION;
@@ -409,17 +406,27 @@ public class StrobeActivity extends Activity {
     }
   }
 
+  private int getFlashColor() {
+      if (state == State.SUPERNODE || state == State.SUBNODE) { 
+        int index = cluster % defaultColors.length;
+        if (index < 0) index += defaultColors.length;
+        return defaultColors[index];
+      } else {
+        return Constants.APP_COLOR_WHITE;
+      }
+  }
 
   private Runnable mFadeTask = new Runnable() { //make this faster
     public void run() {
       final View contentView = findViewById(R.id.fullscreen_content);
       long elapsed = System.currentTimeMillis() - flashTimeStamp;
+      int flashColor = getFlashColor();
 
       //interpolate
       double frac = (double) elapsed/flashPeriod;
-      int r = (int) ((1 - frac) * flashR) + (int) (frac * restR);
-      int g = (int) ((1 - frac) * flashG) + (int) (frac * restG);
-      int b = (int) ((1 - frac) * flashB) + (int) (frac * restB);
+      int r = (int) ((1 - frac) * Color.red(flashColor)) + (int)(frac * Color.red(restColor));
+      int g = (int) ((1 - frac) * Color.green(flashColor)) + (int)(frac * Color.green(restColor));
+      int b = (int) ((1 - frac) * Color.blue(flashColor)) + (int)(frac * Color.blue(restColor));
 
       //System.out.println(r + ", " + g + ", " + b);
 
@@ -430,8 +437,8 @@ public class StrobeActivity extends Activity {
 
       contentView.setBackgroundColor(Color.argb(255, r, g, b));
 
-      if (r != restR || g != restG || b != restB ) {
-        mHandler.postDelayed(this, 5);
+      if (r != Color.red(restColor) || g != Color.green(restColor) || b != Color.blue(restColor)) {
+        mHandler.postDelayed(this, 16);
       }
     }
   };

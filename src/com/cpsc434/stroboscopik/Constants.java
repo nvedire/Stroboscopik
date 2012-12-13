@@ -1,5 +1,7 @@
 package com.cpsc434.stroboscopik;
 
+import android.graphics.Color;
+
 public class Constants {
 	
 	//Sender ID of Project. Required when initially registering with GCM
@@ -33,4 +35,16 @@ public class Constants {
 	
 	static final int 	APP_STARTUP_LONG_WAIT = 10000; //wait max 10 seconds before becoming the supernode.
 	static final int 	APP_STARTUP_SHORT_WAIT = 2000; //wait max 2 seconds before becoming promoted to the supernode.
+	static final double APP_STARTUP_PROMOTION_THRESH = 0.4; // statistically 40% of devices get early promotion
+
+	static final int    APP_COLOR_LIME   = Color.argb(255, 200, 255,   0);
+	static final int    APP_COLOR_GREEN  = Color.argb(255, 127, 255,  36);
+	static final int    APP_COLOR_BLUE   = Color.argb(255,  34, 141, 255);
+	static final int    APP_COLOR_PURPLE = Color.argb(255, 186,   1, 255);
+	static final int    APP_COLOR_PINK   = Color.argb(255, 255,   0, 146);
+	static final int    APP_COLOR_RED    = Color.argb(255, 250,   2,  60);
+	static final int    APP_COLOR_ORANGE = Color.argb(255, 255, 202,  27);
+	static final int    APP_COLOR_YELLOW = Color.argb(255, 255, 247,  22);
+	static final int    APP_COLOR_WHITE  = Color.argb(255, 255, 255, 255);
+	
 }

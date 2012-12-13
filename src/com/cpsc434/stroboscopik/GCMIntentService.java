@@ -115,6 +115,14 @@ public class GCMIntentService extends GCMBaseIntentService {
 		
 		//update frequency in strobe app
 		StrobeActivity.freq = settings.getInt(Constants.APP_FREQUENCY_KEY, Constants.APP_DEFAULT_FREQ);
+		String cluster = settings.getString(Constants.APP_CLUSTER_KEY, "0");
+		
+		if (cluster == Constants.APP_NO_CLUSTER || cluster == Constants.APP_NEW_CLUSTER) {
+    		StrobeActivity.cluster = -1;
+		} else {
+    		StrobeActivity.cluster = Integer.parseInt(cluster);
+		}
+		
 		StrobeActivity.updatePeriods();
 	}
 	
