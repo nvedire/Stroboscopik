@@ -234,7 +234,7 @@ public class StrobeActivity extends Activity {
 
   private Runnable evolveIntoSupernode = new Runnable() {
     public void run() {
-      if (!(state == State.IN_TRANSITION && trans == Transition.SEARCHING_FOR_SUPERNODE) ) return;
+      if (!(state == State.IN_TRANSITION && ( trans == Transition.SEARCHING_FOR_SUPERNODE || trans == Transition.SUPERNODE_PENDING_GCM ) ) ) return;
       SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_MULTI_PROCESS);
       String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then BAD
       if (regId == "") {
@@ -284,6 +284,8 @@ public class StrobeActivity extends Activity {
   
   private Runnable morphIntoSubnode = new Runnable() {
     public void run() {
+      //not sure if conditions below are 100% correct; but note that SEARCHING_FOR_SUPERNODE is a shared transition state in orphan's first step
+      if (!(state == State.IN_TRANSITION && ( trans == Transition.SEARCHING_FOR_SUPERNODE || trans == Transition.SUBNODE_PENDING_GCM ) ) ) return;
       SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_MULTI_PROCESS);
       String regId = settings.getString(Constants.APP_GCM_REGID_KEY, ""); //if "" then bad
       if (regId == "") {
@@ -376,15 +378,15 @@ public class StrobeActivity extends Activity {
     private boolean failed = false;
     protected void onPostExecute(String result) {
       if (StrobeActivity.trans == Transition.SUPERNODE_PENDING_SERVER_VALIDATION ||
-          StrobeActivity.trans == Transition.SUBNODE_PENDING_SERVER_VALIDATION) { //don't show this more than once
+          StrobeActivity.trans == Transition.SUBNODE_PENDING_SERVER_VALIDATION) { //don't do this on timeouts
         Toast message = Toast.makeText(getApplicationContext(), result, Toast.LENGTH_SHORT);
         message.show();
+        if (failed) {
+          //retry
+        }
+        postResultsCleanup();
       }
       
-      if (failed) {
-        //retry
-      }
-      postResultsCleanup();
     } // end of onPostExecute
 
     @Override
