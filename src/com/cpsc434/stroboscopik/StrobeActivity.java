@@ -20,13 +20,11 @@ import org.apache.http.message.BasicNameValuePair;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.SharedPreferences;
-import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -72,8 +70,6 @@ public class StrobeActivity extends Activity {
   /**
    * The instance of the {@link SystemUiHider} for this activity.
    */
-  private static double flashPeriod = 150.0; //the period of time when the screen is "white" or in strobing state
-  private static int restPeriod = 300; //the period of time when the screen is "black" or in resting state
 
   //define resting color
   private static int restR = 0;
@@ -92,6 +88,10 @@ public class StrobeActivity extends Activity {
     SUPERNODE,
     IN_TRANSITION
   };
+  
+  public static int freq = Constants.APP_DEFAULT_FREQ;
+  private static double flashPeriod = 150.0; //the period of time when the screen is "white" or in strobing state
+  private static int restPeriod = 300; //the period of time when the screen is "black" or in resting state
   
   //transition states
   private static enum Transition {
@@ -266,8 +266,6 @@ public class StrobeActivity extends Activity {
 
   private Runnable mFlashTask = new Runnable() { //this is terrible
     public void run() {
-      updatePeriods();
-
       final View contentView = findViewById(R.id.fullscreen_content);
       contentView.setBackgroundColor(Color.argb(255, flashR, flashG, flashB));
       flashTimeStamp = System.currentTimeMillis();
@@ -277,9 +275,7 @@ public class StrobeActivity extends Activity {
     }
   };
 
-  private void updatePeriods() {
-    SharedPreferences settings = getSharedPreferences(Constants.APP_SETTINGS, MODE_MULTI_PROCESS);
-    int freq = settings.getInt(Constants.APP_GCM_FREQUENCY_KEY, Constants.APP_DEFAULT_FREQ);
+  public static void updatePeriods() {
     restPeriod = 1000/freq;
 
     if ( flashPeriod > restPeriod ) {
@@ -287,7 +283,7 @@ public class StrobeActivity extends Activity {
     } else {
       flashPeriod = Constants.APP_DEFAULT_FADE;
     }
-    //Log.d("UpdatePeriods", "new frequency: " + freq);
+    Log.d("UpdatePeriods", "new frequency: " + freq);
   }
   
   private Runnable morphIntoSubnode = new Runnable() {
