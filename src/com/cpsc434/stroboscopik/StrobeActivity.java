@@ -295,13 +295,13 @@ public class StrobeActivity extends Activity {
         return;
       }
   
-      String cluster = settings.getString(Constants.APP_CLUSTER_KEY, Constants.APP_NO_CLUSTER);
-  
       //Perform Registration and Unregistration
       List<NameValuePair> data = new ArrayList<NameValuePair>();
       data.add(new BasicNameValuePair(Constants.APP_DATABASE_ID, regId));
       data.add(new BasicNameValuePair(Constants.APP_REG_ID, regId));
-      data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, "0"));
+      
+      String cluster = settings.getString(Constants.APP_CLUSTER_KEY, Constants.APP_NO_CLUSTER);
+      data.add(new BasicNameValuePair(Constants.APP_CLUSTER_ID, cluster));
   
       HTTPRequestParams[] params = new HTTPRequestParams[1];
       params[0] = new HTTPRequestParams(Constants.APP_REG_URL, data,
