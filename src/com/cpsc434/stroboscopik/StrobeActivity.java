@@ -250,7 +250,8 @@ public class StrobeActivity extends Activity {
           "Success! You are now a supernode.",
           "Failure: cannot contact servers");
       PostHTTPTask p = new PostHTTPTask();
-      trans = Transition.SUPERNODE_PENDING_SERVER_VALIDATION;
+      
+      if (trans != Transition.SUPERNODE_PENDING_GCM) trans = Transition.SUPERNODE_PENDING_SERVER_VALIDATION; //don't change transition state on timeouts!
       
       p.execute(params);
     }
@@ -307,7 +308,9 @@ public class StrobeActivity extends Activity {
           "Failure: cannot contact servers");
   
       PostHTTPTask p = new PostHTTPTask();
-      trans = Transition.SUBNODE_PENDING_SERVER_VALIDATION;
+      
+      if (trans != Transition.SUBNODE_PENDING_GCM) trans = Transition.SUBNODE_PENDING_SERVER_VALIDATION; //don't change transition state on timeouts!
+      
       p.execute(params);
     }
   };
