@@ -1,6 +1,8 @@
 Stroboscopik
 ============
 
+Check out our [presentation](http://prezi.com/m0dxcadxulfd/stroboscopik/?kw=view-m0dxcadxulfd&rc=ref-27056729)!
+
 To pull, do `git pull https://github.com/desktop/Stroboscopik`
 
 Turn on the lights
