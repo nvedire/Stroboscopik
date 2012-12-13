@@ -36,6 +36,8 @@ public class Constants {
 	static final int 	APP_STARTUP_LONG_WAIT = 10000; //wait max 10 seconds before becoming the supernode.
 	static final int 	APP_STARTUP_SHORT_WAIT = 2000; //wait max 2 seconds before becoming promoted to the supernode.
 	static final double APP_STARTUP_PROMOTION_THRESH = 0.4; // statistically 40% of devices get early promotion
+	
+	static final int    APP_GCM_TIMEOUT  = 5000; //5-second GCM timeout
 
 	static final int    APP_COLOR_LIME   = Color.argb(255, 200, 255,   0);
 	static final int    APP_COLOR_GREEN  = Color.argb(255, 127, 255,  36);

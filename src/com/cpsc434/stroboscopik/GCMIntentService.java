@@ -124,6 +124,7 @@ public class GCMIntentService extends GCMBaseIntentService {
 		}
 		
 		StrobeActivity.updatePeriods();
+		StrobeActivity.onReceivedGCMUPdate();
 	}
 	
     @Override

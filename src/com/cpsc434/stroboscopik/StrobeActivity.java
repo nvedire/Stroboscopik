@@ -19,6 +19,7 @@ import org.apache.http.message.BasicNameValuePair;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.AsyncTask;
@@ -59,11 +60,6 @@ public class StrobeActivity extends Activity {
   //define resting color
   private int restColor = Color.argb(0, 0, 0, 0);
   
-  //define flashing color
-  private static int flashR = 186;
-  private static int flashG = 1;
-  private static int flashB = 255;
-  
   private static enum State {
     IDLE,
     ORPHAN,
@@ -95,8 +91,9 @@ public class StrobeActivity extends Activity {
     Constants.APP_COLOR_YELLOW
   };
   
-  private static State state = State.IDLE;
-  private static Transition trans = Transition.NONE;
+  public static State state = State.IDLE;
+  public static Transition trans = Transition.NONE;
+  public static Context context;
 
   private SystemUiHider mSystemUiHider;
   private Handler mHandler = new Handler(); //for dummy flashing
@@ -106,7 +103,8 @@ public class StrobeActivity extends Activity {
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-
+    
+    context = getApplicationContext(); //hack -Dave
     // Check for GCM Registration. Register if not registered
     GCMRegistrar.checkDevice(this);
     GCMRegistrar.checkManifest(this);
@@ -204,6 +202,13 @@ public class StrobeActivity extends Activity {
     mHideHandler.removeCallbacks(mHideRunnable);
     mHideHandler.postDelayed(mHideRunnable, delayMillis);
   }
+ 
+  //allow other services to call static methods in this class to raise Toasts.
+  public static Handler hackMessageHandler = new Handler() {
+    public void handleMessage(android.os.Message msg) {
+        String message = (String)msg.obj;
+    }
+};
   
   private void searchForSupernode() {
     String uid = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
@@ -220,7 +225,7 @@ public class StrobeActivity extends Activity {
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_LONG_WAIT);
       Log.d(TAG, "waiting " + Integer.toString(wait) + " milliseconds for a supernode.");
       mHandler.postDelayed(evolveIntoSupernode, wait);
-    } else {
+    } else { //favor some orphans
       wait = (int) (r.nextDouble() * Constants.APP_STARTUP_SHORT_WAIT);
       Log.d(TAG, "promoted; will become supernode soon.");
       mHandler.postDelayed(evolveIntoSupernode, wait);
@@ -300,6 +305,7 @@ public class StrobeActivity extends Activity {
           "Failure: cannot contact servers");
   
       PostHTTPTask p = new PostHTTPTask();
+      trans = Transition.SUBNODE_PENDING_SERVER_VALIDATION;
       p.execute(params);
     }
   };
@@ -313,26 +319,22 @@ public class StrobeActivity extends Activity {
   //do any post results cleanup if necessary; also retry if necessary
   private void postResultsCleanup()
   {
+    Log.d(TAG, state.toString());
+    Log.d(TAG, trans.toString());
     switch (trans) {
     case NONE:
       break;
     case SEARCHING_FOR_SUPERNODE:
       break;
     case SUBNODE_PENDING_SERVER_VALIDATION:
-      trans = Transition.SUBNODE_PENDING_GCM;
       startFlashing();
-      break;
-    case SUBNODE_PENDING_GCM:
-      state = State.SUBNODE;
-      trans = Transition.NONE;
+      trans = Transition.SUBNODE_PENDING_GCM;
+      mHandler.postDelayed(morphIntoSubnode, Constants.APP_GCM_TIMEOUT);
       break;
     case SUPERNODE_PENDING_SERVER_VALIDATION:
-      trans = Transition.SUPERNODE_PENDING_GCM;
       startFlashing();
-      break;
-    case SUPERNODE_PENDING_GCM:
-      state = State.SUPERNODE;
-      trans = Transition.NONE;
+      trans = Transition.SUPERNODE_PENDING_GCM;
+      mHandler.postDelayed(evolveIntoSupernode, Constants.APP_GCM_TIMEOUT);
       break;
     case FAILED_SUBNODE:
       state = State.IN_TRANSITION;
@@ -346,12 +348,39 @@ public class StrobeActivity extends Activity {
       break;
     }
   }
+  
+  public static void onReceivedGCMUPdate() {
+    Log.d(TAG, state.toString());
+    Log.d(TAG, trans.toString());
+    switch (trans) {
+    case SUBNODE_PENDING_GCM:
+      state = State.SUBNODE;
+      trans = Transition.NONE;
+      Toast.makeText(StrobeActivity.context, "Your cluster is now verified!", Toast.LENGTH_SHORT).show();
+      break;
+    case SUPERNODE_PENDING_GCM:
+      state = State.SUPERNODE;
+      trans = Transition.NONE;
+      Toast.makeText(StrobeActivity.context, "Your supernode status is now verified!", Toast.LENGTH_SHORT).show();
+      break;
+    case SUPERNODE_PENDING_SERVER_VALIDATION:
+      Toast.makeText(StrobeActivity.context, "Your supernode status is now verified!", Toast.LENGTH_SHORT).show();
+      break;
+    case SUBNODE_PENDING_SERVER_VALIDATION:
+      Toast.makeText(StrobeActivity.context, "Your cluster is now verified!", Toast.LENGTH_SHORT).show();
+      break;
+    }
+  }
 
   private class PostHTTPTask extends AsyncTask<HTTPRequestParams, Integer, String> {
     private boolean failed = false;
     protected void onPostExecute(String result) {
-      Toast message = Toast.makeText(getApplicationContext(), result, Toast.LENGTH_SHORT);
-      message.show();
+      if (StrobeActivity.trans == Transition.SUPERNODE_PENDING_SERVER_VALIDATION ||
+          StrobeActivity.trans == Transition.SUBNODE_PENDING_SERVER_VALIDATION) { //don't show this more than once
+        Toast message = Toast.makeText(getApplicationContext(), result, Toast.LENGTH_SHORT);
+        message.show();
+      }
+      
       if (failed) {
         //retry
       }
@@ -415,6 +444,7 @@ public class StrobeActivity extends Activity {
         return Constants.APP_COLOR_WHITE;
       }
   }
+  
 
   private Runnable mFadeTask = new Runnable() { //make this faster
     public void run() {
