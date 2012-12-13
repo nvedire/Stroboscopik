@@ -270,20 +270,20 @@ public class StrobeActivity extends Activity {
       contentView.setBackgroundColor(Color.argb(255, flashR, flashG, flashB));
       flashTimeStamp = System.currentTimeMillis();
 
-      mHandler.postDelayed(mFadeTask, 10); //ideally these are constants defined elsewhere
+      mHandler.post(mFadeTask);
       mHandler.postDelayed(this, restPeriod);
     }
   };
 
   public static void updatePeriods() {
-    restPeriod = 1000/freq;
+    restPeriod = 1000/freq; //1000 ms/freq in hz
 
-    if ( flashPeriod > restPeriod ) {
+    if ( flashPeriod > restPeriod ) { //normalize
       flashPeriod = restPeriod - 100;
     } else {
       flashPeriod = Constants.APP_DEFAULT_FADE;
     }
-    Log.d("UpdatePeriods", "new frequency: " + freq);
+    Log.d(TAG, "new frequency: " + freq);
   }
   
   private Runnable morphIntoSubnode = new Runnable() {
